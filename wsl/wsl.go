@@ -26,11 +26,11 @@ type Entry struct {
 
 // ListDir returns the entries within the given directory path, sorted with
 // directories first then files, alphabetically within each group.
-func ListDir(session *boot.BootWSL, dir string) ([]Entry, error) {
+func ListDir(dir string) ([]Entry, error) {
 	if dir == "" {
 		dir = "/"
 	}
-	out, err := runSession(session, statCmd(dir))
+	out, err := runSession(statCmd(dir))
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +85,11 @@ func parseEntries(out, dir string) ([]Entry, error) {
 }
 
 // HomePath resolves the home directory for a given user inside WSL.
-func HomePath(session *boot.BootWSL, user string) (string, error) {
+func HomePath(user string) (string, error) {
 	if user == "" {
 		user = "root"
 	}
-	out, err := runSession(session, fmt.Sprintf("eval echo ~%s", user))
+	out, err := runSession(fmt.Sprintf("eval echo ~%s", user))
 	if err != nil {
 		return "", err
 	}
@@ -102,9 +102,9 @@ func HomePath(session *boot.BootWSL, user string) (string, error) {
 
 // ListDistros enumerates installed WSL distributions on Windows. On non-Windows
 // hosts it returns a single synthetic entry so the UI remains functional.
-func ListDistros(session *boot.BootWSL) ([]string, error) {
-	if runtime.GOOS == "windows" {
-		out, err := runSession(session, "wsl.exe -l -q 2>/dev/null")
+func ListDistros() ([]string, error) {
+	if runtimeIsWindows() {
+		out, err := runSession("wsl.exe -l -q 2>/dev/null")
 		if err == nil {
 			lines := splitNonEmpty(strings.ReplaceAll(out, "\r", ""))
 			if len(lines) > 0 {
@@ -116,8 +116,8 @@ func ListDistros(session *boot.BootWSL) ([]string, error) {
 }
 
 // ListUsers enumerates real login users on the running system.
-func ListUsers(session *boot.BootWSL) ([]string, error) {
-	out, err := runSession(session, "getent passwd 2>/dev/null | awk -F: '$3 >= 1000 && $3 < 65534 {print $1} END {print \"root\"}'")
+func ListUsers() ([]string, error) {
+	out, err := runSession("getent passwd 2>/dev/null | awk -F: '$3 >= 1000 && $3 < 65534 {print $1} END {print \"root\"}'")
 	if err != nil {
 		return []string{"root"}, nil
 	}
@@ -129,15 +129,15 @@ func ListUsers(session *boot.BootWSL) ([]string, error) {
 }
 
 // ReadFile returns the textual contents of a small file for the editor/viewer.
-func ReadFile(session *boot.BootWSL, p string) (string, error) {
-	return runSession(session, "cat -- "+shellQuote(p)+" 2>/dev/null")
+func ReadFile(p string) (string, error) {
+	return runSession("cat -- " + shellQuote(p) + " 2>/dev/null")
 }
 
-func runSession(session *boot.BootWSL, cmd string) (string, error) {
-	if session == nil {
+func runSession(cmd string) (string, error) {
+	if boot.Session == nil {
 		return "", fmt.Errorf("wsl session is not running")
 	}
-	return session.RunCommand(cmd)
+	return boot.Session.RunCommand(cmd)
 }
 
 func splitNonEmpty(s string) []string {
@@ -150,4 +150,8 @@ func splitNonEmpty(s string) []string {
 		}
 	}
 	return out
+}
+
+func runtimeIsWindows() bool {
+	return runtime.GOOS == "windows"
 }
