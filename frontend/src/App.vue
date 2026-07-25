@@ -4,6 +4,8 @@ import {
   Terminal, BookOpen, Image as ImageIcon, X, RotateCw, Settings,
 } from '@lucide/vue'
 import * as App from '../wailsjs/go/main/App'
+import { useToast } from './composables/useToast'
+import ToastStack from './components/ToastStack.vue'
 import WelcomeScreen from './components/WelcomeScreen.vue'
 import TopBar from './components/TopBar.vue'
 import Desktop from './components/Desktop.vue'
@@ -33,6 +35,7 @@ const ui = reactive({
   showBackgroundPicker: false,
 })
 
+const { notify } = useToast()
 const editorFile = ref(null)
 const viewerFile = ref(null)
 const cwd = ref('/root')
@@ -58,11 +61,19 @@ const desktopStyle = computed(() => {
 })
 
 onMounted(async () => {
-  const cfg = await App.GetConfig().catch(() => null)
-  if (cfg) Object.assign(config, cfg)
+  try {
+    const cfg = await App.GetConfig()
+    if (cfg) Object.assign(config, cfg)
+  } catch (e) {
+    notify('Could not load your saved settings: ' + errMsg(e))
+  }
   cwd.value = config.defaultLinuxPath || '/root'
   currentUser.value = config.defaultLinuxUser || 'root'
-  bootData.value = await App.GetBootData().catch(() => null)
+  try {
+    bootData.value = await App.GetBootData()
+  } catch (e) {
+    notify('Could not read system stats: ' + errMsg(e))
+  }
   if (bootData.value && !config.welcomeDisabled) ui.showWelcome = true
   window.addEventListener('keydown', onKey)
   window.addEventListener('keydown', onNavKey)
@@ -139,17 +150,29 @@ function openInViewer(file) {
 }
 
 async function onTogglePin(path) {
-  const cfg = await App.TogglePinnedFolder(path).catch(() => null)
-  if (cfg) Object.assign(config, cfg)
+  try {
+    const cfg = await App.TogglePinnedFolder(path)
+    if (cfg) Object.assign(config, cfg)
+  } catch (e) {
+    notify('Could not update pinned folders: ' + errMsg(e))
+  }
 }
 async function onSetBackground(image, mode) {
-  const cfg = await App.SetBackground(image, mode).catch(() => null)
-  if (cfg) Object.assign(config, cfg)
-  bgRefresh.value++
-  ui.showBackgroundPicker = false
+  try {
+    const cfg = await App.SetBackground(image, mode)
+    if (cfg) Object.assign(config, cfg)
+    bgRefresh.value++
+    ui.showBackgroundPicker = false
+  } catch (e) {
+    notify('Could not save background: ' + errMsg(e))
+  }
 }
 async function onConfigUpdate(partial) {
   Object.assign(config, partial)
+}
+
+function errMsg(e) {
+  return String(e?.message || e || 'unknown error')
 }
 </script>
 
@@ -213,7 +236,7 @@ async function onConfigUpdate(partial) {
     </Transition>
 
     <Transition name="terminal-slide">
-      <TerminalDrawer v-if="ui.showTerminal" :cwd="cwd" :user="currentUser" @close="ui.showTerminal = false" />
+      <TerminalDrawer v-if="ui.showTerminal" :cwd="cwd" :user="currentUser" @close="ui.showTerminal = false" @navigate="navigateTo" />
     </Transition>
 
     <Transition name="fade">
@@ -231,6 +254,8 @@ async function onConfigUpdate(partial) {
     <Transition name="scale">
       <BackgroundPicker v-if="ui.showBackgroundPicker" :config="config" @apply="onSetBackground" @close="ui.showBackgroundPicker = false" />
     </Transition>
+
+    <ToastStack />
   </div>
 </template>
 

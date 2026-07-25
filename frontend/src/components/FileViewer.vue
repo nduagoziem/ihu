@@ -37,12 +37,11 @@ async function load() {
   try {
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(e)) {
       kind.value = 'image'
-      const txt = await App.ReadFile(props.file.path).catch(() => '')
-      if (txt && /^data:/.test(txt)) {
-        imageUrl.value = txt
+      const b64 = await App.ReadFileBase64(props.file.path)
+      if (b64) {
+        imageUrl.value = `data:image/${e === 'jpg' ? 'jpeg' : e};base64,${b64}`
       } else {
-        imageUrl.value = ''
-        error.value = 'Preview not available in this build. Open in an external viewer.'
+        error.value = 'Could not read this image.'
       }
     } else if (e === 'pdf') {
       kind.value = 'pdf'
@@ -62,17 +61,10 @@ async function load() {
 }
 
 async function loadPdf() {
-  const txt = await App.ReadFile(props.file.path).catch(() => '')
-  if (!txt) { error.value = 'Could not read PDF.'; return }
+  const b64 = await App.ReadFileBase64(props.file.path)
+  if (!b64) { error.value = 'Could not read PDF.'; return }
   const { default: pdfjsLib } = await import('pdfjs-dist')
-  let data
-  try {
-    data = Uint8Array.from(atob(txt), (c) => c.charCodeAt(0))
-  } catch {
-    textContent.value = txt
-    kind.value = 'text'
-    return
-  }
+  const data = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
   const pdf = await pdfjsLib.getDocument({ data }).promise
   const pages = []
@@ -89,21 +81,13 @@ async function loadPdf() {
 }
 
 async function loadDocx() {
-  const [{ default: mammoth }, txt] = await Promise.all([
+  const [{ default: mammoth }, b64] = await Promise.all([
     import('mammoth'),
-    App.ReadFile(props.file.path).catch(() => ''),
+    App.ReadFileBase64(props.file.path),
   ])
-  if (!txt) { error.value = 'Could not read document.'; return }
-  let arrayBuffer
-  try {
-    const bytes = Uint8Array.from(atob(txt), (c) => c.charCodeAt(0))
-    arrayBuffer = bytes.buffer
-  } catch {
-    textContent.value = txt
-    kind.value = 'text'
-    return
-  }
-  const result = await mammoth.convertToHtml({ arrayBuffer })
+  if (!b64) { error.value = 'Could not read document.'; return }
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+  const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer })
   docHtml.value = result.value
 }
 </script>

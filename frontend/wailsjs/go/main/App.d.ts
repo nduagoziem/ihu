@@ -52,3 +52,5 @@ export function HomePath(arg1: string): Promise<string>;
 export function ListDistros(): Promise<string[]>;
 export function ListUsers(): Promise<string[]>;
 export function ReadFile(arg1: string): Promise<string>;
+export function RunWSLCommand(arg1: string): Promise<string>;
+export function ReadFileBase64(arg1: string): Promise<string>;

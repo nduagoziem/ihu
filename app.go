@@ -134,6 +134,12 @@ func (a *App) RunWSLCommand(command string) (string, error) {
 	return a.boot.RunCommand(command)
 }
 
+// ReadFileBase64 returns a file's bytes as base64 for binary-safe transfer
+// to the viewer (images, PDFs, docx).
+func (a *App) ReadFileBase64(path string) (string, error) {
+	return wsl.ReadFileBase64(path)
+}
+
 func (a *App) Greet() string {
 	return "Good Morning from Go"
 }

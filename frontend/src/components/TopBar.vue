@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ChevronLeft, ChevronRight, ChevronDown, Check, Home, Eye, RefreshCw, Image as ImageIcon } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps({
   currentUser: String,
@@ -19,10 +20,19 @@ const openMenu = ref(null)
 const makeDefaultUser = ref(false)
 const makeDefaultDistro = ref(false)
 const pathInput = ref(props.cwd)
+const { notify } = useToast()
 
 onMounted(async () => {
-  distros.value = await App.ListDistros().catch(() => [])
-  users.value = await App.ListUsers().catch(() => [])
+  try {
+    distros.value = await App.ListDistros()
+  } catch (e) {
+    notify('Could not list WSL distros: ' + errStr(e))
+  }
+  try {
+    users.value = await App.ListUsers()
+  } catch (e) {
+    notify('Could not list users: ' + errStr(e))
+  }
   if (props.config.defaultLinuxDistro && !distros.value.includes(props.config.defaultLinuxDistro)) {
     distros.value = [props.config.defaultLinuxDistro, ...distros.value]
   }
@@ -36,19 +46,31 @@ function closeMenus() { openMenu.value = null }
 async function chooseUser(u) {
   emit('update:user', u)
   if (makeDefaultUser.value) {
-    const cfg = await App.SetDefaultLinuxUser(u).catch(() => null)
-    if (cfg) emit('config-update', { defaultLinuxUser: u })
+    try {
+      const cfg = await App.SetDefaultLinuxUser(u)
+      if (cfg) emit('config-update', { defaultLinuxUser: u })
+    } catch (e) {
+      notify('Could not set default user: ' + errStr(e))
+    }
     makeDefaultUser.value = false
   }
-  const home = await App.HomePath(u).catch(() => `/home/${u}`)
-  emit('navigate', home)
+  try {
+    const home = await App.HomePath(u)
+    emit('navigate', home)
+  } catch (e) {
+    notify('Could not resolve home directory: ' + errStr(e))
+  }
   closeMenus()
 }
 async function chooseDistro(d) {
   emit('update:distro', d)
   if (makeDefaultDistro.value) {
-    const cfg = await App.SetDefaultLinuxDistro(d).catch(() => null)
-    if (cfg) emit('config-update', { defaultLinuxDistro: d })
+    try {
+      const cfg = await App.SetDefaultLinuxDistro(d)
+      if (cfg) emit('config-update', { defaultLinuxDistro: d })
+    } catch (e) {
+      notify('Could not set default distro: ' + errStr(e))
+    }
     makeDefaultDistro.value = false
   }
   closeMenus()
@@ -61,6 +83,10 @@ function onPathKeydown(e) {
 }
 function refresh() {
   pathInput.value = props.cwd
+}
+
+function errStr(e) {
+  return String(e?.message || e || 'unknown error')
 }
 </script>
 

@@ -133,6 +133,30 @@ func ReadFile(p string) (string, error) {
 	return runSession("cat -- " + shellQuote(p) + " 2>/dev/null")
 }
 
+// RunCommand forwards an arbitrary command to the live shell session and
+// returns its combined stdout/stderr output. Used by the in-app terminal.
+func RunCommand(cmd string) (string, error) {
+	return runSession(cmd)
+}
+
+// ReadFileBase64 returns a file's raw bytes encoded as base64 so binary
+// content (images, PDFs, docx) can travel safely through the Wails bridge.
+func ReadFileBase64(p string) (string, error) {
+	return runSession("base64 -- " + shellQuote(p) + " 2>/dev/null")
+}
+
+// RunCommand forwards an arbitrary command to the live shell session and
+// returns its combined stdout/stderr output. Used by the in-app terminal.
+func RunCommand(cmd string) (string, error) {
+	return runSession(cmd)
+}
+
+// ReadFileBase64 returns a file's raw bytes encoded as base64 so binary
+// content (images, PDFs, docx) can travel safely through the Wails bridge.
+func ReadFileBase64(p string) (string, error) {
+	return runSession("base64 -- " + shellQuote(p) + " 2>/dev/null")
+}
+
 func runSession(cmd string) (string, error) {
 	if boot.Session == nil {
 		return "", fmt.Errorf("wsl session is not running")

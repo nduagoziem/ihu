@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, nextTick, onMounted, computed } from 'vue'
 import { X, CornerDownLeft, Trash2 } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
 
@@ -7,7 +7,7 @@ const props = defineProps({
   cwd: String,
   user: String,
 })
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'navigate'])
 
 const lines = ref([])
 const input = ref('')
@@ -15,17 +15,14 @@ const inputEl = ref(null)
 const scrollEl = ref(null)
 const cmdHistory = ref([])
 const historyPos = ref(-1)
+const running = ref(false)
 
 const prompt = computed(() => `${props.user}@wsl:${props.cwd}$`)
 
-const isWails = typeof window !== 'undefined' && window.go && window.go.main && window.go.main.App
-
 onMounted(() => {
   push({ type: 'sys', text: `ihu terminal — ${props.user} @ ${props.cwd}` })
-  push({ type: 'sys', text: 'Type a command and press Enter. Try: ls, curl, sudo, help.' })
   nextTick(() => inputEl.value?.focus())
 })
-onBeforeUnmount(() => {})
 
 function push(line) {
   lines.value.push(line)
@@ -36,7 +33,7 @@ function push(line) {
 
 async function run() {
   const raw = input.value.trim()
-  if (!raw) return
+  if (!raw || running.value) return
   cmdHistory.value.push(raw)
   historyPos.value = cmdHistory.value.length
   push({ type: 'cmd', text: raw, prompt: prompt.value })
@@ -48,46 +45,43 @@ async function execute(raw) {
   const cmd = raw.split(/\s+/)[0]
   if (cmd === 'clear' || cmd === 'cls') { lines.value = []; return }
   if (cmd === 'help') {
-    push({ type: 'out', text: 'Builtin: clear, help. Everything else is forwarded to the WSL shell.' })
+    push({ type: 'out', text: 'Builtin: clear, help. Everything else runs in the live WSL shell. Use the folder grid for cd.' })
     return
   }
   if (cmd === 'cd') {
-    push({ type: 'sys', text: 'Use the folder grid or path bar to navigate directories.' })
-    return
-  }
-  // Forward to the live WSL session when available, else simulate.
-  if (isWails) {
-    try {
-      const out = await App.ReadFile(`|${raw}`)
-      // ReadFile isn't really a runner; mock fallback below handles non-wails.
-      push({ type: 'out', text: out })
-    } catch (e) {
-      push({ type: 'err', text: String(e?.message || e) })
+    const arg = raw.split(/\s+/).slice(1).join(' ').trim()
+    if (!arg || arg === '~') {
+      emit('navigate', `/home/${props.user}`)
+    } else if (arg.startsWith('/')) {
+      emit('navigate', arg)
+    } else {
+      emit('navigate', joinPath(props.cwd, arg))
     }
+    push({ type: 'sys', text: 'Changed directory — use the grid or path bar to view contents.' })
     return
   }
-  push({ type: 'out', text: simulate(raw) })
+
+  running.value = true
+  try {
+    const out = await App.RunWSLCommand(raw)
+    push({ type: out ? 'out' : 'sys', text: out || '(no output)' })
+  } catch (e) {
+    push({ type: 'err', text: String(e?.message || e) })
+  } finally {
+    running.value = false
+  }
 }
 
-function simulate(raw) {
-  const cmd = raw.split(/\s+/)[0]
-  if (cmd === 'ls') return 'Documents  Downloads  Projects  Pictures  notes.md  script.sh'
-  if (cmd === 'pwd') return props.cwd
-  if (cmd === 'whoami') return props.user
-  if (cmd === 'curl') {
-    return [
-      '  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current',
-      '                                 Dload  Upload   Total   Spent    Left  Speed',
-      '100  1234  100  1234    0     0   8421      0 --:--:-- --:--:-- --:--:--  8421',
-      '{"status":"ok","fetched_at":"' + new Date().toISOString() + '"}',
-    ].join('\n')
+function joinPath(base, rel) {
+  if (rel === '.') return base
+  if (rel === '..') return base.split('/').slice(0, -1).join('/') || '/'
+  const parts = base.split('/').filter(Boolean)
+  for (const seg of rel.split('/')) {
+    if (!seg || seg === '.') continue
+    if (seg === '..') parts.pop()
+    else parts.push(seg)
   }
-  if (cmd === 'sudo') {
-    return '[sudo] password for ' + props.user + ': \n…command completed successfully.'
-  }
-  if (cmd === 'uname') return 'Linux 6.6.36.3-microsoft x86_64 GNU/Linux'
-  if (cmd === 'echo') return raw.replace(/^echo\s+/, '')
-  return `bash: ${raw}: command output (live session required for real execution)`
+  return '/' + parts.join('/')
 }
 
 function onKeydown(e) {
@@ -145,6 +139,7 @@ function clearTerm() { lines.value = [] }
         class="term__input"
         spellcheck="false"
         autocomplete="off"
+        :disabled="running"
         @keydown="onKeydown"
       />
       <CornerDownLeft :size="14" class="term__enter" />
@@ -217,5 +212,6 @@ function clearTerm() { lines.value = [] }
   color: var(--text-primary);
   font-family: var(--font-mono); font-size: 13px;
 }
+.term__input:disabled { opacity: 0.5; }
 .term__enter { color: var(--text-muted); flex-shrink: 0; }
 </style>

@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { Folder, Pin, PinOff, Home, Star, Clock } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps({
   config: Object,
@@ -13,12 +14,21 @@ const emit = defineEmits(['navigate', 'toggle-pin'])
 const homePath = ref(props.config.defaultLinuxPath || '/root')
 const rootPath = ref('/')
 const openFolders = ref([])
+const { notify } = useToast()
 
 onMounted(async () => {
-  homePath.value = await App.HomePath(props.currentUser).catch(() => props.config.defaultLinuxPath || '/root')
+  try {
+    homePath.value = await App.HomePath(props.currentUser)
+  } catch (e) {
+    notify('Could not resolve home directory: ' + errStr(e))
+  }
 })
 watch(() => props.currentUser, async (u) => {
-  homePath.value = await App.HomePath(u).catch(() => `/home/${u}`)
+  try {
+    homePath.value = await App.HomePath(u)
+  } catch (e) {
+    notify('Could not resolve home directory: ' + errStr(e))
+  }
 })
 
 watch(() => props.cwd, (c, old) => {
@@ -38,6 +48,10 @@ function shortName(path) {
 
 function nav(path) { emit('navigate', path) }
 function togglePin(path) { emit('toggle-pin', path) }
+
+function errStr(e) {
+  return String(e?.message || e || 'unknown error')
+}
 
 const sections = computed(() => [
   { id: 'root', label: 'Root', icon: Home, items: [{ path: rootPath.value, name: 'root' }, { path: homePath.value, name: 'home' }] },
