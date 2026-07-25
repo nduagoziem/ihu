@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"ihu/boot"
 	"ihu/config"
@@ -12,43 +11,43 @@ import (
 
 // App struct
 type App struct {
-	ctx context.Context
+	ctx  context.Context
+	boot *boot.BootWSL
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{}
+	return &App{
+		boot: &boot.BootWSL{},
+	}
 }
 
 // startup is called when the app starts. The context is saved
-// so we can call the runtime methods
+// so we can call the runtime methods.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	sess := &boot.BootWSL{}
-	if _, err := sess.Boot(); err != nil {
+	if a.boot == nil {
+		a.boot = &boot.BootWSL{}
+	}
+	if _, err := a.boot.Boot(); err != nil {
 		fmt.Println("boot:", err)
 	}
 }
 
 // shutdown closes the live WSL session when the window is closing.
 func (a *App) shutdown(ctx context.Context) {
+	if a.boot != nil {
+		a.boot.Close()
+		return
+	}
 	if boot.Session != nil {
 		boot.Session.Close()
 	}
 }
 
-// BootData returns the launch-time stats used by the welcome screen.
-type BootData struct {
-	SystemStats *boot.SystemStats `json:"systemStats"`
-	BootedAt    string            `json:"bootedAt"`
-}
-
 // GetBootData returns system statistics and a timestamp for the welcome screen.
-func (a *App) GetBootData() BootData {
-	return BootData{
-		SystemStats: boot.GetStats(),
-		BootedAt:    time.Now().Local().Format(time.RFC1123),
-	}
+func (a *App) GetBootData() boot.BootData {
+	return boot.GetBootData()
 }
 
 // --- Config ---------------------------------------------------------------
@@ -127,7 +126,14 @@ func (a *App) ReadFile(path string) (string, error) {
 	return wsl.ReadFile(path)
 }
 
-// Greet returns a greeting for the given name
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
+// RunWSLCommand sends a command to the long-lived WSL shell and returns stdout/stderr.
+func (a *App) RunWSLCommand(command string) (string, error) {
+	if a.boot == nil {
+		return "", fmt.Errorf("wsl session is not initialized")
+	}
+	return a.boot.RunCommand(command)
+}
+
+func (a *App) Greet() string {
+	return "Good Morning from Go"
 }
