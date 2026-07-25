@@ -22,39 +22,39 @@ type SystemStats struct {
 	Timestamp     string `json:"timestamp"`
 }
 
-func GetStats(session *BootWSL) *SystemStats {
+func GetStats() *SystemStats {
 	stats := SystemStats{
-		Arch:      getArch(session),
-		Distro:    getDistro(session),
-		Kernel:    getKernel(session),
+		Arch:      getArch(),
+		Distro:    getDistro(),
+		Kernel:    getKernel(),
 		Timestamp: getTimestamp(),
 	}
 
-	if cpu, err := getCPUUsage(session); err != nil {
+	if cpu, err := getCPUUsage(); err != nil {
 		stats.CPUUsage = 0
 	} else {
 		stats.CPUUsage = cpu
 	}
 
-	if mem, err := getMemoryUsage(session); err != nil {
+	if mem, err := getMemoryUsage(); err != nil {
 		stats.MemoryUsage = 0
 	} else {
 		stats.MemoryUsage = mem
 	}
 
-	if disk, err := getDiskUsage(session); err != nil {
+	if disk, err := getDiskUsage(); err != nil {
 		stats.DiskUsage = 0
 	} else {
 		stats.DiskUsage = disk
 	}
 
-	if temp, err := getTemperature(session); err != nil {
+	if temp, err := getTemperature(); err != nil {
 		stats.Temperature = 0
 	} else {
 		stats.Temperature = temp
 	}
 
-	if net, err := getNetworkStatus(session); err != nil {
+	if net, err := getNetworkStatus(); err != nil {
 		stats.NetworkStatus = "inactive"
 	} else {
 		stats.NetworkStatus = net
@@ -63,22 +63,22 @@ func GetStats(session *BootWSL) *SystemStats {
 	return &stats
 }
 
-// REFACTORED INTERNALS: All functions use the app-owned session.
+// REFACTORED INTERNALS: All functions use Session.RunCommand
 
-func getArch(session *BootWSL) string {
-	if out, err := runOnSession(session, "uname -m"); err == nil && out != "" {
+func getArch() string {
+	if out, err := runOnSession("uname -m"); err == nil && out != "" {
 		return out
 	}
 	return runtime.GOARCH
 }
 
-func getCPUUsage(session *BootWSL) (int, error) {
-	first, err := readProcStat(session)
+func getCPUUsage() (int, error) {
+	first, err := readProcStat()
 	if err != nil {
 		return 0, err
 	}
 	time.Sleep(250 * time.Millisecond)
-	second, err := readProcStat(session)
+	second, err := readProcStat()
 	if err != nil {
 		return 0, err
 	}
@@ -92,8 +92,8 @@ func getCPUUsage(session *BootWSL) (int, error) {
 	return clampPercent(int((100 * (totalDelta - idleDelta)) / totalDelta)), nil
 }
 
-func getMemoryUsage(session *BootWSL) (int, error) {
-	out, err := runOnSession(session, "cat /proc/meminfo")
+func getMemoryUsage() (int, error) {
+	out, err := runOnSession("cat /proc/meminfo")
 	if err != nil {
 		return 0, err
 	}
@@ -121,8 +121,8 @@ func getMemoryUsage(session *BootWSL) (int, error) {
 	return clampPercent(int((100 * (total - available)) / total)), nil
 }
 
-func getDiskUsage(session *BootWSL) (int, error) {
-	out, err := runOnSession(session, "df -P /")
+func getDiskUsage() (int, error) {
+	out, err := runOnSession("df -P /")
 	if err != nil {
 		return 0, err
 	}
@@ -145,14 +145,14 @@ func getDiskUsage(session *BootWSL) (int, error) {
 	return clampPercent(value), nil
 }
 
-func getTemperature(session *BootWSL) (int, error) {
+func getTemperature() (int, error) {
 	temperatureFiles := []string{
 		"/sys/class/thermal/thermal_zone0/temp",
 		"/sys/class/thermal/thermal_zone1/temp",
 	}
 
 	for _, file := range temperatureFiles {
-		if data, err := runOnSession(session, "cat "+file); err == nil && len(data) > 0 {
+		if data, err := runOnSession("cat " + file); err == nil && len(data) > 0 {
 			if temp, err := strconv.Atoi(strings.TrimSpace(data)); err == nil {
 				return temp / 1000, nil
 			}
@@ -161,9 +161,9 @@ func getTemperature(session *BootWSL) (int, error) {
 	return 0, fmt.Errorf("no thermal zone found")
 }
 
-func getNetworkStatus(session *BootWSL) (string, error) {
+func getNetworkStatus() (string, error) {
 	// Evaluates exit code directly in the active shell environment
-	_, err := runOnSession(session, "ip route get 1.1.1.1")
+	_, err := runOnSession("ip route get 1.1.1.1")
 	if err == nil {
 		return "active", nil
 	}
@@ -174,15 +174,15 @@ func getTimestamp() string {
 	return time.Now().Local().Format(time.RFC1123)
 }
 
-func getDistro(session *BootWSL) string {
-	if out, err := runOnSession(session, ". /etc/os-release 2>/dev/null && printf '%s' \"$PRETTY_NAME\""); err == nil && out != "" {
+func getDistro() string {
+	if out, err := runOnSession(". /etc/os-release 2>/dev/null && printf '%s' \"$PRETTY_NAME\""); err == nil && out != "" {
 		return out
 	}
 	return "unknown"
 }
 
-func getKernel(session *BootWSL) string {
-	if out, err := runOnSession(session, "uname -r"); err == nil && out != "" {
+func getKernel() string {
+	if out, err := runOnSession("uname -r"); err == nil && out != "" {
 		return out
 	}
 	return "unknown"
@@ -193,8 +193,8 @@ type cpuSample struct {
 	idle  int
 }
 
-func readProcStat(session *BootWSL) (cpuSample, error) {
-	out, err := runOnSession(session, "cat /proc/stat")
+func readProcStat() (cpuSample, error) {
+	out, err := runOnSession("cat /proc/stat")
 	if err != nil {
 		return cpuSample{}, err
 	}
@@ -224,11 +224,11 @@ func readProcStat(session *BootWSL) (cpuSample, error) {
 }
 
 // Optimized Helper replacing runWSL process-spawning
-func runOnSession(session *BootWSL, cmdStr string) (string, error) {
-	if session == nil {
+func runOnSession(cmdStr string) (string, error) {
+	if Session == nil {
 		return "", fmt.Errorf("active session instance not bound yet")
 	}
-	return session.RunCommand(cmdStr)
+	return Session.RunCommand(cmdStr)
 }
 
 func clampPercent(value int) int {

@@ -3,37 +3,27 @@ package main
 import (
 	"context"
 	"fmt"
-<<<<<<< HEAD
 	"time"
 
 	"ihu/boot"
 	"ihu/config"
 	"ihu/wsl"
-=======
-	"ihu/boot"
-	"ihu/config"
-	"log"
->>>>>>> 9bc2b59 (wip: progress on wsl boot and session.)
 )
 
 // App struct
 type App struct {
-	ctx  context.Context
-	boot *boot.BootWSL
+	ctx context.Context
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{
-		boot: &boot.BootWSL{},
-	}
+	return &App{}
 }
 
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-<<<<<<< HEAD
 	sess := &boot.BootWSL{}
 	if _, err := sess.Boot(); err != nil {
 		fmt.Println("boot:", err)
@@ -135,44 +125,9 @@ func (a *App) ListUsers() ([]string, error) {
 // ReadFile returns the contents of a file for the editor/viewer.
 func (a *App) ReadFile(path string) (string, error) {
 	return wsl.ReadFile(path)
-=======
-
-	if _, err := a.boot.Boot(); err != nil {
-		log.Printf("failed to boot WSL session: %v", err)
-	}
->>>>>>> 9bc2b59 (wip: progress on wsl boot and session.)
 }
 
-// The shutdown method will be called by Wails right at the end of the shutdown process.
-// This is a good place to deallocate memory and perform any shutdown tasks.
-func (a *App) shutdown(ctx context.Context) {
-	if a.boot != nil {
-		a.boot.Close()
-	}
+// Greet returns a greeting for the given name
+func (a *App) Greet(name string) string {
+	return fmt.Sprintf("Hello %s, It's show time!", name)
 }
-
-// GetBootData returns the WSL stats used by the UI.
-func (a *App) GetBootData() boot.BootData {
-	return boot.GetBootData(a.boot)
-}
-
-// RunWSLCommand sends a command to the long-lived WSL shell and returns stdout/stderr.
-func (a *App) RunWSLCommand(command string) (string, error) {
-	if a.boot == nil {
-		return "", fmt.Errorf("wsl session is not initialized")
-	}
-	return a.boot.RunCommand(command)
-}
-
-// SetWelcomeDisabled updates the configuration to disable the welcome screen on app launch.
-func (a *App) SetWelcomeDisabled(disabled bool) error {
-	return config.SetWelcomeDisabled(disabled)
-}
-
-func (a *App) Greet() string {
-	return "Good Morning from Go"
-}
-
-// func (a *App) Greet(name string) string {
-// 	return fmt.Sprintf("Hello %s, It's show time!", name)
-// }

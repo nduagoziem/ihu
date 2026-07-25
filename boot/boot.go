@@ -1,3 +1,4 @@
+// boot.go
 package boot
 
 import (
@@ -13,10 +14,10 @@ import (
 
 // BootWSL represents the WSL boot process, managing long-lived streams.
 type BootWSL struct {
-	wslCmd *exec.Cmd      // The long-lived WSL shell process
-	input  io.WriteCloser // The stdin pipe to send commands to the shell
-	reader *bufio.Reader  // The stdout reader to capture shell output
-	mu     sync.Mutex     // Prevents concurrent writes/reads on the single shell instance
+	wslCmd *exec.Cmd
+	input  io.WriteCloser
+	reader *bufio.Reader
+	mu     sync.Mutex // Prevents concurrent writes/reads on the single shell instance
 }
 
 // BootData contains the necessary WSL data returned to the frontend at app launch.
@@ -24,6 +25,9 @@ type BootData struct {
 	SystemStats *SystemStats `json:"systemStats"`
 	BootedAt    string       `json:"bootedAt"`
 }
+
+// Global session instance so systemstats.go can access it cleanly
+var Session *BootWSL
 
 // Boot starts a persistent interactive bash shell session inside WSL.
 func (b *BootWSL) Boot() (string, error) {
@@ -58,8 +62,9 @@ func (b *BootWSL) Boot() (string, error) {
 	b.wslCmd = cmd
 	b.input = inputPipe
 	b.reader = bufio.NewReader(outputPipe)
+	Session = b // Set the global singleton
 
-	return "WSL Session initialized successfully...", nil
+	return "WSL Session initialized successfully", nil
 }
 
 // RunCommand sends a command to the live shell session and blocks until it reads the full response.
@@ -72,7 +77,7 @@ func (b *BootWSL) RunCommand(cmdStr string) (string, error) {
 	defer b.mu.Unlock()
 
 	// Unique token to detect when this specific command concludes
-	delimiter := "___WSL_CMD_DONE___"
+	delimiter := "___CMD_DONE___"
 
 	// Format: Execute the command, then echo our delimiter token on a new line
 	fmt.Fprint(b.input, cmdStr+"\n")
@@ -133,12 +138,14 @@ func (b *BootWSL) Close() {
 	b.wslCmd = nil
 	b.input = nil
 	b.reader = nil
+	if Session == b {
+		Session = nil
+	}
 }
 
-// GetBootData returns the WSL stats used by the UI.
-func GetBootData(session *BootWSL) BootData {
+func GetBootData() BootData {
 	return BootData{
-		SystemStats: GetStats(session),
+		SystemStats: GetStats(),
 		BootedAt:    time.Now().Local().Format(time.RFC1123),
 	}
 }
