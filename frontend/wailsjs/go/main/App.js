@@ -7,6 +7,7 @@ const isWails = typeof window !== 'undefined' && window.go && window.go.main && 
 
 const go = isWails ? window.go.main.App : null
 
+<<<<<<< HEAD
 export function Greet(arg1) {
   if (go) return go.Greet(arg1)
   return Promise.resolve(`Hello ${arg1}, It's show time!`)
@@ -154,4 +155,20 @@ function mockFile(path) {
     return Promise.resolve(`#!/usr/bin/env bash\nset -euo pipefail\n\necho "Hello from ${name}"\nfor i in {1..5}; do\n  echo "  line $i"\ndone\n`)
   }
   return Promise.resolve(`Contents of ${name}\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit.\n`)
+=======
+export function GetBootData() {
+  return window['go']['main']['App']['GetBootData']();
+}
+
+export function Greet() {
+  return window['go']['main']['App']['Greet']();
+}
+
+export function RunWSLCommand(arg1) {
+  return window['go']['main']['App']['RunWSLCommand'](arg1);
+}
+
+export function SetWelcomeDisabled(arg1) {
+  return window['go']['main']['App']['SetWelcomeDisabled'](arg1);
+>>>>>>> 9bc2b59 (wip: progress on wsl boot and session.)
 }
