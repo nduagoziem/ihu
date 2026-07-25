@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+<<<<<<< HEAD
 	"time"
+=======
+>>>>>>> 2e4cadf (Refactor WSL session handling in app and wsl packages)
 
 	"ihu/boot"
 	"ihu/config"
@@ -24,31 +27,26 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+<<<<<<< HEAD
 	sess := &boot.BootWSL{}
 	if _, err := sess.Boot(); err != nil {
+=======
+	if _, err := a.boot.Boot(); err != nil {
+>>>>>>> 2e4cadf (Refactor WSL session handling in app and wsl packages)
 		fmt.Println("boot:", err)
 	}
 }
 
 // shutdown closes the live WSL session when the window is closing.
 func (a *App) shutdown(ctx context.Context) {
-	if boot.Session != nil {
-		boot.Session.Close()
+	if a.boot != nil {
+		a.boot.Close()
 	}
-}
-
-// BootData returns the launch-time stats used by the welcome screen.
-type BootData struct {
-	SystemStats *boot.SystemStats `json:"systemStats"`
-	BootedAt    string            `json:"bootedAt"`
 }
 
 // GetBootData returns system statistics and a timestamp for the welcome screen.
-func (a *App) GetBootData() BootData {
-	return BootData{
-		SystemStats: boot.GetStats(),
-		BootedAt:    time.Now().Local().Format(time.RFC1123),
-	}
+func (a *App) GetBootData() boot.BootData {
+	return boot.GetBootData(a.boot)
 }
 
 // --- Config ---------------------------------------------------------------
@@ -104,26 +102,27 @@ func (a *App) SetBackground(image, mode string) (*config.WSLConfig, error) {
 
 // ListDir returns the entries within a WSL directory.
 func (a *App) ListDir(dir string) ([]wsl.Entry, error) {
-	return wsl.ListDir(dir)
+	return wsl.ListDir(a.boot, dir)
 }
 
 // HomePath resolves the home directory for a user.
 func (a *App) HomePath(user string) (string, error) {
-	return wsl.HomePath(user)
+	return wsl.HomePath(a.boot, user)
 }
 
 // ListDistros enumerates installed WSL distributions.
 func (a *App) ListDistros() ([]string, error) {
-	return wsl.ListDistros()
+	return wsl.ListDistros(a.boot)
 }
 
 // ListUsers enumerates login users on the system.
 func (a *App) ListUsers() ([]string, error) {
-	return wsl.ListUsers()
+	return wsl.ListUsers(a.boot)
 }
 
 // ReadFile returns the contents of a file for the editor/viewer.
 func (a *App) ReadFile(path string) (string, error) {
+<<<<<<< HEAD
 	return wsl.ReadFile(path)
 }
 
@@ -131,3 +130,23 @@ func (a *App) ReadFile(path string) (string, error) {
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
 }
+=======
+	return wsl.ReadFile(a.boot, path)
+}
+
+// RunWSLCommand sends a command to the long-lived WSL shell and returns stdout/stderr.
+func (a *App) RunWSLCommand(command string) (string, error) {
+	if a.boot == nil {
+		return "", fmt.Errorf("wsl session is not initialized")
+	}
+	return a.boot.RunCommand(command)
+}
+
+func (a *App) Greet() string {
+	return "Good Morning from Go"
+}
+
+// func (a *App) Greet(name string) string {
+// 	return fmt.Sprintf("Hello %s, It's show time!", name)
+// }
+>>>>>>> 2e4cadf (Refactor WSL session handling in app and wsl packages)
