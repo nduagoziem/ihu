@@ -1,9 +1,9 @@
-// systemstats.go
-package boot
+package wsl
 
 import (
 	"bufio"
 	"fmt"
+	"ihu/boot"
 	"runtime"
 	"strconv"
 	"strings"
@@ -11,17 +11,17 @@ import (
 )
 
 type SystemStats struct {
-	Arch          string `json:"arch"`
-	Distro        string `json:"distro"`
-	Kernel        string `json:"kernel"`
-	CPUUsage      int    `json:"cpuUsage"`
-	MemoryUsage   int    `json:"memoryUsage"`
-	DiskUsage     int    `json:"diskUsage"`
-	Temperature   int    `json:"temperature"`
-	NetworkStatus string `json:"networkStatus"`
-	Timestamp     string `json:"timestamp"`
+	Arch        string `json:"arch"`
+	Distro      string `json:"distro"`
+	Kernel      string `json:"kernel"`
+	CPUUsage    int    `json:"cpuUsage"`
+	MemoryUsage int    `json:"memoryUsage"`
+	DiskUsage   int    `json:"diskUsage"`
+	Temperature int    `json:"temperature"`
+	Timestamp   string `json:"timestamp"`
 }
 
+// GetStats returns some of WSL system stats.
 func GetStats() *SystemStats {
 	stats := SystemStats{
 		Arch:      getArch(),
@@ -49,21 +49,13 @@ func GetStats() *SystemStats {
 	}
 
 	if temp, err := getTemperature(); err != nil {
-		stats.Temperature = 0
+		stats.Temperature = -1
 	} else {
 		stats.Temperature = temp
 	}
 
-	if net, err := getNetworkStatus(); err != nil {
-		stats.NetworkStatus = "inactive"
-	} else {
-		stats.NetworkStatus = net
-	}
-
 	return &stats
 }
-
-// REFACTORED INTERNALS: All functions use Session.RunCommand
 
 func getArch() string {
 	if out, err := runOnSession("uname -m"); err == nil && out != "" {
@@ -161,15 +153,6 @@ func getTemperature() (int, error) {
 	return 0, fmt.Errorf("no thermal zone found")
 }
 
-func getNetworkStatus() (string, error) {
-	// Evaluates exit code directly in the active shell environment
-	_, err := runOnSession("ip route get 1.1.1.1")
-	if err == nil {
-		return "active", nil
-	}
-	return "inactive", nil
-}
-
 func getTimestamp() string {
 	return time.Now().Local().Format(time.RFC1123)
 }
@@ -223,12 +206,11 @@ func readProcStat() (cpuSample, error) {
 	return sample, nil
 }
 
-// Optimized Helper replacing runWSL process-spawning
 func runOnSession(cmdStr string) (string, error) {
-	if Session == nil {
+	if boot.Session == nil {
 		return "", fmt.Errorf("active session instance not bound yet")
 	}
-	return Session.RunCommand(cmdStr)
+	return boot.Session.RunCommand(cmdStr)
 }
 
 func clampPercent(value int) int {

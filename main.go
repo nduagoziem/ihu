@@ -1,7 +1,11 @@
+//go:build windows
+
 package main
 
 import (
 	"embed"
+	"fmt"
+	"ihu/config"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -10,6 +14,12 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+func init() {
+	if err := config.EnsureWSLConfig(); err != nil {
+		fmt.Println(err)
+	}
+}
 
 func main() {
 	// Create an instance of the app structure
@@ -23,9 +33,8 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
+		OnStartup:  app.startup,
+		OnShutdown: app.shutdown,
 		Bind: []interface{}{
 			app,
 		},

@@ -6,6 +6,10 @@ import * as App from '../../wailsjs/go/main/App'
 const props = defineProps({
   cwd: String,
   config: Object,
+  currentUser: String,
+  currentDistro: String,
+  superUser: Boolean,
+  refreshKey: Number,
 })
 const emit = defineEmits(['navigate', 'open-editor', 'open-viewer', 'toggle-pin'])
 
@@ -17,13 +21,13 @@ const showHidden = ref(false)
 const selectedAt = ref({ x: 0, y: 0, time: 0 })
 
 onMounted(load)
-watch(() => props.cwd, load)
+watch(() => [props.cwd, props.currentUser, props.currentDistro, props.superUser, props.refreshKey], load)
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    entries.value = await App.ListDir(props.cwd)
+    entries.value = await App.ListDirAs(props.cwd, props.currentDistro || '', props.currentUser || '', props.superUser || props.currentUser === 'root')
   } catch (e) {
     error.value = String(e?.message || e || 'Failed to load directory')
     entries.value = []
@@ -96,9 +100,6 @@ function clearSelection() {
   selected.value = null
 }
 
-function onDesktopDblClick() {
-  load()
-}
 </script>
 
 <template>
@@ -127,10 +128,9 @@ function onDesktopDblClick() {
 
     <div v-else-if="!visibleEntries.length" class="desktop__empty">
       <p class="desktop__empty-title">This folder is empty</p>
-      <p class="desktop__empty-sub">Double-click the desktop to refresh.</p>
     </div>
 
-    <div v-else class="desktop__grid" @dblclick.self="onDesktopDblClick">
+    <div v-else class="desktop__grid">
       <div
         v-for="entry in visibleEntries"
         :key="entry.path"
@@ -167,7 +167,7 @@ function onDesktopDblClick() {
 <style scoped>
 .desktop {
   position: absolute;
-  top: 76px; left: 12px; right: 12px; bottom: 116px;
+  top: 68px; left: 12px; right: 12px; bottom: 116px;
   z-index: 5;
 }
 .desktop__breadcrumbs {

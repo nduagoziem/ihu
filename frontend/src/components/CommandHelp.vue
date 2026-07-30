@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { X, Search, ChevronDown, ChevronRight } from '@lucide/vue'
 import { commandGroups, searchCommands } from '../data/commands.js'
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
 
 const query = ref('')
 const expanded = ref(new Set(['native']))

@@ -15,13 +15,21 @@ hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('markdown', markdown)
 hljs.registerLanguage('json', json)
 
-const props = defineProps({ file: Object })
+const props = defineProps({
+  file: Object,
+  currentUser: String,
+  currentDistro: String,
+  superUser: Boolean,
+})
 const emit = defineEmits(['close'])
 
 const content = ref('')
 const loading = ref(true)
+const error = ref('')
 const dirty = ref(false)
 const edited = ref('')
+const saving = ref(false)
+const highlightEl = ref(null)
 
 const lang = computed(() => {
   const n = (props.file?.name || '').toLowerCase()
@@ -47,17 +55,19 @@ function escapeHtml(s) {
 }
 
 onMounted(load)
-watch(() => props.file?.path, load)
+watch(() => [props.file?.path, props.currentUser, props.currentDistro, props.superUser], load)
 
 async function load() {
   if (!props.file) return
   loading.value = true
+  error.value = ''
   try {
-    content.value = await App.ReadFile(props.file.path)
+    content.value = await App.ReadFileAs(props.file.path, props.currentDistro || '', props.currentUser || '', isElevated())
     edited.value = content.value
     dirty.value = false
   } catch (e) {
-    content.value = `// Unable to read ${props.file.name}\n// ${String(e?.message || e)}`
+    error.value = String(e?.message || e)
+    content.value = `// Unable to read ${props.file.name}\n// ${error.value}`
   } finally {
     loading.value = false
   }
@@ -67,9 +77,27 @@ function onInput(e) {
   edited.value = e.target.value
   dirty.value = edited.value !== content.value
 }
-function save() {
-  content.value = edited.value
-  dirty.value = false
+function onScroll(e) {
+  if (!highlightEl.value) return
+  highlightEl.value.scrollTop = e.target.scrollTop
+  highlightEl.value.scrollLeft = e.target.scrollLeft
+}
+async function save() {
+  if (!props.file || saving.value) return
+  saving.value = true
+  error.value = ''
+  try {
+    await App.WriteFileAs(props.file.path, edited.value, props.currentDistro || '', props.currentUser || '', isElevated())
+    content.value = edited.value
+    dirty.value = false
+  } catch (e) {
+    error.value = String(e?.message || e || 'Failed to save file')
+  } finally {
+    saving.value = false
+  }
+}
+function isElevated() {
+  return props.superUser || props.currentUser === 'root'
 }
 </script>
 
@@ -83,17 +111,18 @@ function save() {
           <span v-if="dirty" class="editor__dot"></span>
         </div>
         <div class="editor__actions">
-          <button class="editor__btn" :disabled="!dirty" @click="save"><Save :size="14" /> Save</button>
+          <button class="editor__btn" :disabled="!dirty || saving" @click="save"><Save :size="14" /> {{ saving ? 'Saving' : 'Save' }}</button>
           <button class="editor__btn" @click="emit('close')"><X :size="16" /></button>
         </div>
       </div>
       <div class="editor__body">
-        <pre class="editor__highlight" v-html="highlighted"></pre>
+        <pre ref="highlightEl" class="editor__highlight" v-html="highlighted"></pre>
         <textarea
           class="editor__textarea"
           :value="dirty ? edited : content"
           spellcheck="false"
           @input="onInput"
+          @scroll="onScroll"
           @keydown.tab.prevent="$event.target.setRangeText('  ', $event.target.selectionStart, $event.target.selectionEnd, 'end')"
         ></textarea>
       </div>
@@ -101,6 +130,7 @@ function save() {
         <span>{{ lang }}</span>
         <span>{{ (dirty ? edited : content).split('\n').length }} lines</span>
         <span v-if="dirty">Unsaved changes</span>
+        <span v-if="error" class="editor__error">{{ error }}</span>
       </div>
     </div>
   </div>
@@ -119,14 +149,17 @@ function save() {
   border-radius: var(--r-xl);
   display: flex; flex-direction: column;
   overflow: hidden;
-  background: #282c34;
+  background: rgba(24, 28, 36, 0.86);
+  backdrop-filter: blur(36px) saturate(170%);
+  -webkit-backdrop-filter: blur(36px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: var(--shadow-lg);
   animation: scaleIn var(--t-slow) var(--ease-out);
 }
 .editor__bar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 14px; height: 44px;
-  background: #21252b;
+  background: rgba(12, 15, 20, 0.54);
   border-bottom: 1px solid #181a1f;
 }
 .editor__file { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #abb2bf; }
@@ -154,6 +187,7 @@ function save() {
   tab-size: 2;
 }
 .editor__highlight { color: #abb2bf; pointer-events: none; }
+.editor__highlight::-webkit-scrollbar { width: 0; height: 0; }
 .editor__highlight :deep(.hljs-keyword) { color: #c678dd; }
 .editor__highlight :deep(.hljs-string) { color: #98c379; }
 .editor__highlight :deep(.hljs-comment) { color: #5c6370; font-style: italic; }
@@ -173,8 +207,9 @@ function save() {
 .editor__status {
   display: flex; gap: 16px;
   padding: 8px 22px;
-  background: #21252b;
+  background: rgba(12, 15, 20, 0.54);
   border-top: 1px solid #181a1f;
   font-size: 11px; color: #5c6370;
 }
+.editor__error { color: #e06c75; }
 </style>

@@ -18,7 +18,7 @@ type App struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
-		boot: &boot.BootWSL{},
+		boot: boot.Session,
 	}
 }
 
@@ -45,31 +45,10 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
-// GetBootData returns system statistics and a timestamp for the welcome screen.
-func (a *App) GetBootData() boot.BootData {
-	return boot.GetBootData()
-}
-
 // --- Config ---------------------------------------------------------------
 
 // GetConfig returns the persisted app configuration.
 func (a *App) GetConfig() (*config.WSLConfig, error) {
-	return config.LoadWSLConfig()
-}
-
-// SetWelcomeDisabled toggles whether the welcome screen shows at startup.
-func (a *App) SetWelcomeDisabled(disabled bool) (*config.WSLConfig, error) {
-	if err := config.SetWelcomeDisabled(disabled); err != nil {
-		return nil, err
-	}
-	return config.LoadWSLConfig()
-}
-
-// SetDefaultLinuxPath persists the chosen default landing directory.
-func (a *App) SetDefaultLinuxPath(path string) (*config.WSLConfig, error) {
-	if err := config.SetDefaultLinuxPath(path); err != nil {
-		return nil, err
-	}
 	return config.LoadWSLConfig()
 }
 
@@ -101,9 +80,17 @@ func (a *App) SetBackground(image, mode string) (*config.WSLConfig, error) {
 
 // --- Filesystem -----------------------------------------------------------
 
+func (a *App) GetStats() *wsl.SystemStats {
+	return wsl.GetStats()
+}
+
 // ListDir returns the entries within a WSL directory.
 func (a *App) ListDir(dir string) ([]wsl.Entry, error) {
 	return wsl.ListDir(dir)
+}
+
+func (a *App) ListDirAs(dir, distro, user string, elevated bool) ([]wsl.Entry, error) {
+	return wsl.ListDirAs(dir, distro, user, elevated)
 }
 
 // HomePath resolves the home directory for a user.
@@ -126,12 +113,41 @@ func (a *App) ReadFile(path string) (string, error) {
 	return wsl.ReadFile(path)
 }
 
+func (a *App) ReadFileAs(path, distro, user string, elevated bool) (string, error) {
+	return wsl.ReadFileAs(path, distro, user, elevated)
+}
+
+// WriteFile persists text editor changes to a WSL file.
+func (a *App) WriteFile(path, contents string) error {
+	return wsl.WriteFile(path, contents)
+}
+
+func (a *App) WriteFileAs(path, contents, distro, user string, elevated bool) error {
+	return wsl.WriteFileAs(path, contents, distro, user, elevated)
+}
+
 // RunWSLCommand sends a command to the long-lived WSL shell and returns stdout/stderr.
 func (a *App) RunWSLCommand(command string) (string, error) {
-	if a.boot == nil {
+	session := a.boot
+	if session == nil {
+		session = boot.Session
+	}
+	if session == nil {
 		return "", fmt.Errorf("wsl session is not initialized")
 	}
-	return a.boot.RunCommand(command)
+	out, err := session.RunCommand(command)
+	if err != nil && out != "" {
+		return out, nil
+	}
+	return out, err
+}
+
+func (a *App) RunWSLCommandAs(command, distro, user string, elevated bool) (string, error) {
+	out, err := wsl.RunCommandAs(command, distro, user, elevated)
+	if err != nil && out != "" {
+		return out, nil
+	}
+	return out, err
 }
 
 // ReadFileBase64 returns a file's bytes as base64 for binary-safe transfer
@@ -140,6 +156,6 @@ func (a *App) ReadFileBase64(path string) (string, error) {
 	return wsl.ReadFileBase64(path)
 }
 
-func (a *App) Greet() string {
-	return "Good Morning from Go"
+func (a *App) ReadFileBase64As(path, distro, user string, elevated bool) (string, error) {
+	return wsl.ReadFileBase64As(path, distro, user, elevated)
 }

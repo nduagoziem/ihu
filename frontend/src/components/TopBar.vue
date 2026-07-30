@@ -1,6 +1,6 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ChevronLeft, ChevronRight, ChevronDown, Check, Home, Eye, RefreshCw, Image as ImageIcon } from '@lucide/vue'
+import { ref, onMounted, watch } from 'vue'
+import { ChevronLeft, ChevronRight, ChevronDown, Check, Home, Eye, RefreshCw, Image as ImageIcon, Terminal, BookOpen, Shield } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
 import { useToast } from '../composables/useToast'
 
@@ -11,8 +11,11 @@ const props = defineProps({
   cwd: String,
   canGoBack: Boolean,
   canGoForward: Boolean,
+  showTerminal: Boolean,
+  showHelp: Boolean,
+  superUser: Boolean,
 })
-const emit = defineEmits(['navigate', 'back', 'forward', 'update:user', 'update:distro', 'config-update', 'show-welcome', 'show-background'])
+const emit = defineEmits(['navigate', 'back', 'forward', 'home', 'refresh', 'update:user', 'update:distro', 'update:super-user', 'config-update', 'show-stats', 'show-background', 'toggle-terminal', 'toggle-help'])
 
 const distros = ref([])
 const users = ref([])
@@ -33,9 +36,17 @@ onMounted(async () => {
   } catch (e) {
     notify('Could not list users: ' + errStr(e))
   }
+  if (!distros.value.length) distros.value = ['default']
   if (props.config.defaultLinuxDistro && !distros.value.includes(props.config.defaultLinuxDistro)) {
     distros.value = [props.config.defaultLinuxDistro, ...distros.value]
   }
+  if (!props.currentDistro) {
+    emit('update:distro', props.config.defaultLinuxDistro || distros.value[0])
+  }
+})
+
+watch(() => props.cwd, (cwd) => {
+  pathInput.value = cwd || '/'
 })
 
 function toggleMenu(name) {
@@ -45,13 +56,9 @@ function closeMenus() { openMenu.value = null }
 
 async function chooseUser(u) {
   emit('update:user', u)
+  emit('update:super-user', u === 'root')
   if (makeDefaultUser.value) {
-    try {
-      const cfg = await App.SetDefaultLinuxUser(u)
-      if (cfg) emit('config-update', { defaultLinuxUser: u })
-    } catch (e) {
-      notify('Could not set default user: ' + errStr(e))
-    }
+    await setDefaultUser(u)
     makeDefaultUser.value = false
   }
   try {
@@ -65,15 +72,34 @@ async function chooseUser(u) {
 async function chooseDistro(d) {
   emit('update:distro', d)
   if (makeDefaultDistro.value) {
-    try {
-      const cfg = await App.SetDefaultLinuxDistro(d)
-      if (cfg) emit('config-update', { defaultLinuxDistro: d })
-    } catch (e) {
-      notify('Could not set default distro: ' + errStr(e))
-    }
+    await setDefaultDistro(d)
     makeDefaultDistro.value = false
   }
   closeMenus()
+}
+async function setDefaultUser(user = props.currentUser) {
+  if (!user) return
+  try {
+    const cfg = await App.SetDefaultLinuxUser(user)
+    if (cfg) emit('config-update', { defaultLinuxUser: cfg.defaultLinuxUser })
+  } catch (e) {
+    notify('Could not set default user: ' + errStr(e))
+  }
+}
+async function setDefaultDistro(distro = props.currentDistro) {
+  if (!distro) return
+  try {
+    const cfg = await App.SetDefaultLinuxDistro(distro)
+    if (cfg) emit('config-update', { defaultLinuxDistro: cfg.defaultLinuxDistro })
+  } catch (e) {
+    notify('Could not set default distro: ' + errStr(e))
+  }
+}
+async function onDefaultUserToggle() {
+  if (makeDefaultUser.value) await setDefaultUser()
+}
+async function onDefaultDistroToggle() {
+  if (makeDefaultDistro.value) await setDefaultDistro()
 }
 function onPathKeydown(e) {
   if (e.key === 'Enter') {
@@ -83,6 +109,7 @@ function onPathKeydown(e) {
 }
 function refresh() {
   pathInput.value = props.cwd
+  emit('refresh')
 }
 
 function errStr(e) {
@@ -99,7 +126,7 @@ function errStr(e) {
       <button class="icon-btn" :disabled="!canGoForward" title="Forward (Alt+Right)" @click.stop="emit('forward')">
         <ChevronRight :size="18" />
       </button>
-      <button class="icon-btn" title="Home" @click.stop="emit('navigate', config.defaultLinuxPath || '/root')">
+      <button class="icon-btn" title="Home" @click.stop="emit('home')">
         <Home :size="16" />
       </button>
     </div>
@@ -121,7 +148,7 @@ function errStr(e) {
       <div class="menu-host">
         <button class="chip" :class="{ open: openMenu === 'distro' }" @click.stop="toggleMenu('distro')">
           <span class="chip__label">Distro</span>
-          <span class="chip__value">{{ currentDistro || 'Ubuntu' }}</span>
+          <span class="chip__value">{{ currentDistro || config.defaultLinuxDistro || 'default' }}</span>
           <ChevronDown :size="14" />
         </button>
         <Transition name="fade">
@@ -139,8 +166,8 @@ function errStr(e) {
               </button>
             </div>
             <label class="menu__default">
-              <input type="checkbox" v-model="makeDefaultDistro" />
-              Set as default
+              <input type="checkbox" v-model="makeDefaultDistro" @change="onDefaultDistroToggle" />
+              Set current as default
             </label>
           </div>
         </Transition>
@@ -167,15 +194,24 @@ function errStr(e) {
               </button>
             </div>
             <label class="menu__default">
-              <input type="checkbox" v-model="makeDefaultUser" />
-              Set as default
+              <input type="checkbox" v-model="makeDefaultUser" @change="onDefaultUserToggle" />
+              Set current as default
             </label>
           </div>
         </Transition>
       </div>
 
-      <button class="icon-btn" title="Show welcome screen" @click.stop="emit('show-welcome')">
+      <button class="icon-btn" :class="{ active: superUser }" title="Super User" @click.stop="emit('update:super-user', !superUser)">
+        <Shield :size="16" />
+      </button>
+      <button class="icon-btn" title="System Stats" @click.stop="emit('show-stats')">
         <Eye :size="16" />
+      </button>
+      <button class="icon-btn" :class="{ active: showTerminal }" title="Terminal (Ctrl/Cmd+T)" @click.stop="emit('toggle-terminal')">
+        <Terminal :size="16" />
+      </button>
+      <button class="icon-btn" :class="{ active: showHelp }" title="Command Help (Ctrl/Cmd+H)" @click.stop="emit('toggle-help')">
+        <BookOpen :size="16" />
       </button>
       <button class="icon-btn" title="Background (Shift+I)" @click.stop="emit('show-background')">
         <ImageIcon :size="16" />
@@ -187,16 +223,16 @@ function errStr(e) {
 <style scoped>
 .topbar {
   position: fixed;
-  top: 12px;
+  top: 6px;
   left: 12px;
   right: 12px;
-  height: 48px;
+  height: 46px;
   border-radius: var(--r-lg);
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 10px;
-  z-index: 30;
+  z-index: 70;
   box-shadow: var(--shadow-md);
 }
 .topbar__nav { display: flex; gap: 2px; }
@@ -232,6 +268,7 @@ function errStr(e) {
 }
 .icon-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
 .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.icon-btn.active { background: var(--info-100); color: var(--accent-hover); box-shadow: inset 0 0 0 1px var(--info-300); }
 
 .chip {
   display: flex; align-items: center; gap: 6px;

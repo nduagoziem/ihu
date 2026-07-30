@@ -1,12 +1,17 @@
 // Package wsl exposes filesystem and distro operations through the live
 // interactive WSL bash session managed by the boot package.
+// This is the core of the application.
 package wsl
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
+	"os/exec"
 	"path"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ihu/boot"
@@ -27,29 +32,39 @@ type Entry struct {
 // ListDir returns the entries within the given directory path, sorted with
 // directories first then files, alphabetically within each group.
 func ListDir(dir string) ([]Entry, error) {
+	return ListDirAs(dir, "", "", false)
+}
+
+func ListDirAs(dir, distro, user string, elevated bool) ([]Entry, error) {
+
 	if dir == "" {
 		dir = "/"
 	}
-	out, err := runSession(statCmd(dir))
+
+	out, err := RunCommandAs(listDirCmd(dir), distro, user, elevated)
 	if err != nil {
 		return nil, err
 	}
+
 	entries, err := parseEntries(out, dir)
 	if err != nil {
 		return nil, err
 	}
+
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].IsDir != entries[j].IsDir {
 			return entries[i].IsDir
 		}
 		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
 	})
+
 	return entries, nil
 }
 
 // statCmd builds a portable `ls` invocation that emits one record per line.
-func statCmd(dir string) string {
-	return "ls -L -1 -p --almost-all -q --color=never --time-style=long-iso " + shellQuote(dir) + " 2>/dev/null"
+func listDirCmd(dir string) string {
+	quoted := shellQuote(dir)
+	return "test -d " + quoted + " && find " + quoted + " -mindepth 1 -maxdepth 1 -printf '%f\\t%p\\t%y\\t%s\\t%TY-%Tm-%Td %TH:%TM\\t%M\\n'"
 }
 
 // shellQuote wraps a value in POSIX single quotes, escaping embedded quotes.
@@ -62,23 +77,40 @@ func shellQuote(s string) string {
 // signal for IsDir. The output alone does not provide per-file metadata, so we
 // issue a supplementary `stat` batch for richer details when available.
 func parseEntries(out, dir string) ([]Entry, error) {
+
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	entries := make([]Entry, 0, len(lines))
+
 	for _, line := range lines {
-		name := strings.TrimSpace(line)
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		fields := strings.Split(line, "\t")
+		if len(fields) < 6 {
+			continue
+		}
+
+		name := fields[0]
 		if name == "" || name == "." || name == ".." {
 			continue
 		}
-		isDir := strings.HasSuffix(name, "/")
-		if isDir {
-			name = strings.TrimSuffix(name, "/")
+
+		size, _ := strconv.ParseInt(fields[3], 10, 64)
+		full := fields[1]
+		if full == "" {
+			full = path.Join(dir, name)
 		}
-		full := path.Join(dir, name)
 		entries = append(entries, Entry{
-			Name:     name,
-			Path:     full,
-			IsDir:    isDir,
-			IsHidden: strings.HasPrefix(name, "."),
+			Name:      name,
+			Path:      full,
+			IsDir:     fields[2] == "d",
+			IsSymlink: fields[2] == "l",
+			IsHidden:  strings.HasPrefix(name, "."),
+			Size:      size,
+			Modified:  fields[4],
+			Perm:      fields[5],
 		})
 	}
 	return entries, nil
@@ -86,33 +118,37 @@ func parseEntries(out, dir string) ([]Entry, error) {
 
 // HomePath resolves the home directory for a given user inside WSL.
 func HomePath(user string) (string, error) {
-	if user == "" {
+	if strings.TrimSpace(user) == "" {
 		user = "root"
 	}
-	out, err := runSession(fmt.Sprintf("eval echo ~%s", user))
+	out, err := runSession("sh -lc " + shellQuote("cd ~"+user+" && pwd"))
 	if err != nil {
 		return "", err
 	}
 	clean := strings.TrimSpace(out)
 	if clean == "" {
-		return path.Join("/home", user), nil
+		return "", fmt.Errorf("could not resolve home directory for user %q", user)
 	}
 	return clean, nil
 }
 
-// ListDistros enumerates installed WSL distributions on Windows. On non-Windows
-// hosts it returns a single synthetic entry so the UI remains functional.
+// ListDistros enumerates installed WSL distributions on Windows.
 func ListDistros() ([]string, error) {
-	if runtimeIsWindows() {
-		out, err := runSession("wsl.exe -l -q 2>/dev/null")
-		if err == nil {
-			lines := splitNonEmpty(strings.ReplaceAll(out, "\r", ""))
-			if len(lines) > 0 {
-				return lines, nil
-			}
-		}
+
+	cmd := exec.Command("wsl.exe", "-l", "-q")
+
+	// This is necessary even though called in Boot(), because the command above doesn't go through boot.RunCommand().
+	boot.HideTerminalApps(cmd)
+
+	out, err := cmd.Output()
+	if err != nil {
+		return []string{"default"}, err
 	}
-	return []string{"Ubuntu"}, nil
+	lines := splitNonEmpty(cleanWindowsCommandOutput(string(out)))
+	if len(lines) == 0 {
+		return []string{"default"}, nil
+	}
+	return lines, nil
 }
 
 // ListUsers enumerates real login users on the running system.
@@ -130,31 +166,61 @@ func ListUsers() ([]string, error) {
 
 // ReadFile returns the textual contents of a small file for the editor/viewer.
 func ReadFile(p string) (string, error) {
-	return runSession("cat -- " + shellQuote(p) + " 2>/dev/null")
+	return ReadFileAs(p, "", "", false)
 }
 
-// RunCommand forwards an arbitrary command to the live shell session and
-// returns its combined stdout/stderr output. Used by the in-app terminal.
-func RunCommand(cmd string) (string, error) {
-	return runSession(cmd)
+func ReadFileAs(p, distro, user string, elevated bool) (string, error) {
+	return RunCommandAs("cat -- "+shellQuote(p)+" 2>/dev/null", distro, user, elevated)
 }
 
-// ReadFileBase64 returns a file's raw bytes encoded as base64 so binary
-// content (images, PDFs, docx) can travel safely through the Wails bridge.
-func ReadFileBase64(p string) (string, error) {
-	return runSession("base64 -- " + shellQuote(p) + " 2>/dev/null")
+// WriteFile replaces a text file's contents inside WSL.
+func WriteFile(p, contents string) error {
+	return WriteFileAs(p, contents, "", "", false)
 }
 
-// RunCommand forwards an arbitrary command to the live shell session and
-// returns its combined stdout/stderr output. Used by the in-app terminal.
-func RunCommand(cmd string) (string, error) {
-	return runSession(cmd)
+func WriteFileAs(p, contents, distro, user string, elevated bool) error {
+	encoded := base64.StdEncoding.EncodeToString([]byte(contents))
+	_, err := RunCommandAs("printf %s "+shellQuote(encoded)+" | base64 -d > "+shellQuote(p), distro, user, elevated)
+	return err
 }
 
 // ReadFileBase64 returns a file's raw bytes encoded as base64 so binary
 // content (images, PDFs, docx) can travel safely through the Wails bridge.
 func ReadFileBase64(p string) (string, error) {
-	return runSession("base64 -- " + shellQuote(p) + " 2>/dev/null")
+	return ReadFileBase64As(p, "", "", false)
+}
+
+func ReadFileBase64As(p, distro, user string, elevated bool) (string, error) {
+	return RunCommandAs("base64 -w 0 -- "+shellQuote(p)+" 2>/dev/null", distro, user, elevated)
+}
+
+func RunCommandAs(cmd, distro, user string, elevated bool) (string, error) {
+	// if runtimeIsWindows() {
+	args := []string{}
+	if distro != "" && distro != "default" {
+		args = append(args, "-d", distro)
+	}
+	if resolved := commandUser(user, elevated); resolved != "" {
+		args = append(args, "-u", resolved)
+	}
+	args = append(args, "--", "sh", "-lc", cmd)
+
+	wslCmd := exec.Command("wsl.exe", args...)
+
+	// This is necessary even though called in Boot(), because the command above doesn't go through boot.RunCommand().
+	boot.HideTerminalApps(wslCmd)
+
+	out, err := wslCmd.CombinedOutput()
+	clean := strings.TrimSpace(cleanCommandBytes(out))
+	if err != nil && clean != "" {
+		return clean, err
+	}
+	// return clean, err
+	// }
+	if elevated || user == "root" {
+		return runSession("sudo -n sh -lc " + shellQuote(cmd))
+	}
+	return runSession(cmd)
 }
 
 func runSession(cmd string) (string, error) {
@@ -178,4 +244,22 @@ func splitNonEmpty(s string) []string {
 
 func runtimeIsWindows() bool {
 	return runtime.GOOS == "windows"
+}
+
+func cleanWindowsCommandOutput(s string) string {
+	s = strings.TrimPrefix(s, "\ufeff")
+	return strings.ReplaceAll(s, "\x00", "")
+}
+
+func cleanCommandBytes(out []byte) string {
+	out = bytes.TrimPrefix(out, []byte{0xff, 0xfe})
+	out = bytes.TrimPrefix(out, []byte{0xfe, 0xff})
+	return cleanWindowsCommandOutput(string(out))
+}
+
+func commandUser(user string, elevated bool) string {
+	if elevated || user == "root" {
+		return "root"
+	}
+	return strings.TrimSpace(user)
 }

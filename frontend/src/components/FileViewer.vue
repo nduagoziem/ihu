@@ -3,7 +3,12 @@ import { ref, watch, onMounted, computed } from 'vue'
 import { X, FileText, Loader2 } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
 
-const props = defineProps({ file: Object })
+const props = defineProps({
+  file: Object,
+  currentUser: String,
+  currentDistro: String,
+  superUser: Boolean,
+})
 const emit = defineEmits(['close'])
 
 const loading = ref(true)
@@ -21,7 +26,7 @@ const ext = computed(() => {
 })
 
 onMounted(load)
-watch(() => props.file?.path, load)
+watch(() => [props.file?.path, props.currentUser, props.currentDistro, props.superUser], load)
 
 async function load() {
   if (!props.file) return
@@ -37,7 +42,7 @@ async function load() {
   try {
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(e)) {
       kind.value = 'image'
-      const b64 = await App.ReadFileBase64(props.file.path)
+      const b64 = await readBase64(props.file.path)
       if (b64) {
         imageUrl.value = `data:image/${e === 'jpg' ? 'jpeg' : e};base64,${b64}`
       } else {
@@ -51,7 +56,7 @@ async function load() {
       await loadDocx()
     } else {
       kind.value = 'text'
-      textContent.value = await App.ReadFile(props.file.path)
+      textContent.value = await App.ReadFileAs(props.file.path, props.currentDistro || '', props.currentUser || '', isElevated())
     }
   } catch (err) {
     error.value = String(err?.message || err || 'Failed to open file')
@@ -61,7 +66,7 @@ async function load() {
 }
 
 async function loadPdf() {
-  const b64 = await App.ReadFileBase64(props.file.path)
+  const b64 = await readBase64(props.file.path)
   if (!b64) { error.value = 'Could not read PDF.'; return }
   const { default: pdfjsLib } = await import('pdfjs-dist')
   const data = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
@@ -83,12 +88,18 @@ async function loadPdf() {
 async function loadDocx() {
   const [{ default: mammoth }, b64] = await Promise.all([
     import('mammoth'),
-    App.ReadFileBase64(props.file.path),
+    readBase64(props.file.path),
   ])
   if (!b64) { error.value = 'Could not read document.'; return }
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
   const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer })
   docHtml.value = result.value
+}
+function readBase64(path) {
+  return App.ReadFileBase64As(path, props.currentDistro || '', props.currentUser || '', isElevated())
+}
+function isElevated() {
+  return props.superUser || props.currentUser === 'root'
 }
 </script>
 
@@ -139,14 +150,17 @@ async function loadDocx() {
   border-radius: var(--r-xl);
   display: flex; flex-direction: column;
   overflow: hidden;
-  background: var(--surface-2);
+  background: rgba(16, 19, 25, 0.82);
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: var(--shadow-lg);
   animation: scaleIn var(--t-slow) var(--ease-out);
 }
 .viewer__bar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 14px; height: 44px;
-  background: var(--surface-1);
+  background: rgba(10, 12, 16, 0.42);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .viewer__file { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
@@ -157,19 +171,19 @@ async function loadDocx() {
 }
 .viewer__btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
 
-.viewer__body { flex: 1; overflow: auto; display: grid; place-items: center; }
+.viewer__body { flex: 1; overflow: auto; display: grid; align-items: start; justify-items: stretch; }
 .viewer__loading, .viewer__error { display: grid; place-items: center; gap: 12px; color: var(--text-muted); }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.viewer__image { padding: 24px; max-width: 100%; max-height: 100%; display: grid; place-items: center; }
+.viewer__image { padding: 24px; max-width: 100%; max-height: 100%; display: grid; place-items: center; justify-self: center; align-self: center; }
 .viewer__image img { max-width: 100%; max-height: 70vh; border-radius: var(--r-md); box-shadow: var(--shadow-md); }
 .viewer__placeholder { color: var(--text-muted); }
 
 .viewer__pdf { padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .viewer__pdf img { max-width: 100%; border-radius: var(--r-sm); box-shadow: var(--shadow-md); }
 
-.viewer__docx { padding: 32px 40px; max-width: 720px; color: var(--text-primary); line-height: 1.7; }
+.viewer__docx { padding: 32px 40px; max-width: 720px; color: var(--text-primary); line-height: 1.7; justify-self: center; }
 .viewer__docx :deep(h1), .viewer__docx :deep(h2), .viewer__docx :deep(h3) { margin: 1.2em 0 0.5em; color: var(--text-primary); }
 .viewer__docx :deep(p) { margin: 0.6em 0; }
 .viewer__docx :deep(strong) { color: var(--text-primary); }

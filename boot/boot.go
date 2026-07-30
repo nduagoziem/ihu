@@ -1,12 +1,16 @@
-// boot.go
+// Package boot manages the lifecycle of the WSL2 environment. It provides three main functionalities: booting a long-lived WSL session, running commands in that session, and closing the session.
 package boot
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,19 +18,14 @@ import (
 
 // BootWSL represents the WSL boot process, managing long-lived streams.
 type BootWSL struct {
-	wslCmd *exec.Cmd
-	input  io.WriteCloser
-	reader *bufio.Reader
-	mu     sync.Mutex // Prevents concurrent writes/reads on the single shell instance
+	wslCmd       *exec.Cmd
+	input        io.WriteCloser
+	outputWriter io.Closer
+	reader       *bufio.Reader
+	mu           sync.Mutex // Prevents concurrent writes/reads on the single shell instance
 }
 
-// BootData contains the necessary WSL data returned to the frontend at app launch.
-type BootData struct {
-	SystemStats *SystemStats `json:"systemStats"`
-	BootedAt    string       `json:"bootedAt"`
-}
-
-// Global session instance so systemstats.go can access it cleanly
+// Global session instance so system_stats.go can access it cleanly
 var Session *BootWSL
 
 // Boot starts a persistent interactive bash shell session inside WSL.
@@ -41,27 +40,26 @@ func (b *BootWSL) Boot() (string, error) {
 	} else {
 		cmd = exec.Command("bash", "--noprofile", "--norc")
 	}
+	HideTerminalApps(cmd)
 
 	inputPipe, err := cmd.StdinPipe()
 	if err != nil {
 		return "", err
 	}
 
-	outputPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", err
-	}
-
-	// Redirect Stderr to Stdout so we don't lock up on unexpected error channels
-	cmd.Stderr = cmd.Stdout
+	outputReader, outputWriter := io.Pipe()
+	cmd.Stdout = outputWriter
+	cmd.Stderr = outputWriter
 
 	if err := cmd.Start(); err != nil {
+		_ = outputWriter.Close()
 		return "", err
 	}
 
 	b.wslCmd = cmd
 	b.input = inputPipe
-	b.reader = bufio.NewReader(outputPipe)
+	b.outputWriter = outputWriter
+	b.reader = bufio.NewReader(outputReader)
 	Session = b // Set the global singleton
 
 	return "WSL Session initialized successfully", nil
@@ -76,14 +74,13 @@ func (b *BootWSL) RunCommand(cmdStr string) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// Unique token to detect when this specific command concludes
-	delimiter := "___CMD_DONE___"
+	delimiter := "___IHU_CMD_DONE_" + randomToken() + "___"
 
-	// Format: Execute the command, then echo our delimiter token on a new line
 	fmt.Fprint(b.input, cmdStr+"\n")
-	fmt.Fprint(b.input, "echo "+delimiter+"\n")
+	fmt.Fprintf(b.input, "printf '\\n%s:%%s\\n' $?\n", delimiter)
 
 	var outputLines []string
+	exitCode := 0
 	for {
 		line, err := b.reader.ReadString('\n')
 		if err != nil {
@@ -94,17 +91,25 @@ func (b *BootWSL) RunCommand(cmdStr string) (string, error) {
 		}
 
 		cleanLine := strings.TrimSpace(line)
-		if cleanLine == delimiter {
+		if after, ok := strings.CutPrefix(cleanLine, delimiter+":"); ok {
+			code, err := strconv.Atoi(after)
+			if err == nil {
+				exitCode = code
+			}
 			break
 		}
 
-		// Collect raw output lines, ignoring the command echo match itself if reflected
-		if !strings.Contains(line, delimiter) {
-			outputLines = append(outputLines, line)
-		}
+		outputLines = append(outputLines, line)
 	}
 
-	return strings.TrimSpace(strings.Join(outputLines, "")), nil
+	out := strings.TrimSpace(strings.Join(outputLines, ""))
+	if exitCode != 0 {
+		if out == "" {
+			out = fmt.Sprintf("command exited with status %d", exitCode)
+		}
+		return out, errors.New(out)
+	}
+	return out, nil
 }
 
 // Close gracefully terminates the running WSL instance.
@@ -119,6 +124,9 @@ func (b *BootWSL) Close() {
 	if b.input != nil {
 		_, _ = fmt.Fprint(b.input, "exit\n")
 		_ = b.input.Close()
+	}
+	if b.outputWriter != nil {
+		_ = b.outputWriter.Close()
 	}
 
 	done := make(chan error, 1)
@@ -137,15 +145,18 @@ func (b *BootWSL) Close() {
 
 	b.wslCmd = nil
 	b.input = nil
+	b.outputWriter = nil
 	b.reader = nil
 	if Session == b {
 		Session = nil
 	}
 }
 
-func GetBootData() BootData {
-	return BootData{
-		SystemStats: GetStats(),
-		BootedAt:    time.Now().Local().Format(time.RFC1123),
+// Random delimiter token generator.
+func randomToken() string {
+	buf := make([]byte, 6)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
+	return hex.EncodeToString(buf)
 }

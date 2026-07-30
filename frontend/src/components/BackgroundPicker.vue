@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { X, Check } from '@lucide/vue'
+import bgImage1 from '../assets/images/app-bg-img-1.jpg'
+import bgImage2 from '../assets/images/app-bg-img-2.jpg'
 
 const props = defineProps({ config: Object })
 const emit = defineEmits(['apply', 'close'])
@@ -15,13 +17,11 @@ const gradients = [
 ]
 
 const presets = [
-  'https://images.pexels.com/photos/957061/milky-way-starry-sky-night-sky-957061.jpeg?auto=compress&cs=tinysrgb&w=1600',
-  'https://images.pexels.com/photos/417074/pexels-photo-417074.jpeg?auto=compress&cs=tinysrgb&w=1600',
-  'https://images.pexels.com/photos/1292115/pexels-photo-1292115.jpeg?auto=compress&cs=tinysrgb&w=1600',
-  'https://images.pexels.com/photos/235621/pexels-photo-235621.jpeg?auto=compress&cs=tinysrgb&w=1600',
+  bgImage1,
+  bgImage2,
 ]
 
-const selected = ref(props.config?.backgroundImage || '')
+const selected = ref(resolvePreset(props.config?.backgroundImage || ''))
 const mode = ref(props.config?.backgroundMode || 'gradient')
 const selectedGradient = ref(gradients.find((g) => g.css === props.config?.backgroundImage) || gradients[0])
 
@@ -37,6 +37,11 @@ function pickImage(url) {
 }
 function apply() {
   emit('apply', selected.value, mode.value)
+}
+function resolvePreset(value) {
+  if (value === '../assets/images/app-bg-img-1.jpg') return bgImage1
+  if (value === '../assets/images/app-bg-img-2.jpg') return bgImage2
+  return value
 }
 </script>
 
@@ -73,7 +78,7 @@ function apply() {
             :key="url"
             class="photo"
             :class="{ active: selected === url }"
-            :style="{ backgroundImage: `url('${url}')` }"
+            :style="{ backgroundImage: `linear-gradient(135deg, rgba(5, 8, 12, 0.58), rgba(20, 32, 46, 0.42)), url('${url}')` }"
             @click="pickImage(url)"
           >
             <Check v-if="selected === url" :size="20" class="photo__check" />

@@ -11,7 +11,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['navigate', 'toggle-pin'])
 
-const homePath = ref(props.config.defaultLinuxPath || '/root')
+const homePath = ref('/')
 const rootPath = ref('/')
 const openFolders = ref([])
 const { notify } = useToast()

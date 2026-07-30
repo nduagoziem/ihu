@@ -1,12 +1,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
-import {
-  Terminal, BookOpen, Image as ImageIcon, X, RotateCw, Settings,
-} from '@lucide/vue'
 import * as App from '../wailsjs/go/main/App'
 import { useToast } from './composables/useToast'
 import ToastStack from './components/ToastStack.vue'
-import WelcomeScreen from './components/WelcomeScreen.vue'
+import SystemStats from './components/SystemStats.vue'
 import TopBar from './components/TopBar.vue'
 import Desktop from './components/Desktop.vue'
 import BottomDock from './components/BottomDock.vue'
@@ -15,10 +12,10 @@ import CommandHelp from './components/CommandHelp.vue'
 import TextEditor from './components/TextEditor.vue'
 import FileViewer from './components/FileViewer.vue'
 import BackgroundPicker from './components/BackgroundPicker.vue'
+import bgImage1 from './assets/images/app-bg-img-1.jpg'
+import bgImage2 from './assets/images/app-bg-img-2.jpg'
 
 const config = reactive({
-  welcomeDisabled: false,
-  defaultLinuxPath: '/root',
   defaultLinuxUser: 'root',
   defaultLinuxDistro: '',
   pinnedFolders: [],
@@ -27,7 +24,7 @@ const config = reactive({
 })
 
 const ui = reactive({
-  showWelcome: false,
+  showStats: false,
   showTerminal: false,
   showHelp: false,
   showEditor: false,
@@ -38,23 +35,36 @@ const ui = reactive({
 const { notify } = useToast()
 const editorFile = ref(null)
 const viewerFile = ref(null)
-const cwd = ref('/root')
+const cwd = ref('/')
 const currentUser = ref('root')
 const currentDistro = ref('')
-const bootData = ref(null)
+const superUser = ref(false)
+const systemStats = ref(null)
 const bgRefresh = ref(0)
+const desktopRefresh = ref(0)
+const modalActive = computed(() => (
+  ui.showStats
+  || ui.showTerminal
+  || ui.showHelp
+  || ui.showEditor
+  || ui.showViewer
+  || ui.showBackgroundPicker
+))
 
 const desktopStyle = computed(() => {
   void bgRefresh.value
-  const img = config.backgroundImage
+  const background = config.backgroundImage
   const mode = config.backgroundMode || 'gradient'
-  if (img) {
-    const cover = mode === 'cover' || mode === 'gradient'
+  const resolvedBackground = resolveBackground(background)
+  if (resolvedBackground) {
+    if (mode === 'gradient') {
+      return { backgroundImage: resolvedBackground }
+    }
     return {
-      backgroundImage: `url("${img}")`,
-      backgroundSize: cover ? 'cover' : 'contain',
+      backgroundImage: `linear-gradient(135deg, rgba(5, 8, 12, 0.78), rgba(20, 32, 46, 0.58), rgba(5, 6, 8, 0.74)), url("${resolvedBackground}")`,
+      backgroundSize: mode === 'cover' ? 'cover' : 'contain',
       backgroundPosition: 'center',
-      backgroundRepeat: mode === 'contain' ? 'no-repeat' : 'no-repeat',
+      backgroundRepeat: 'no-repeat',
     }
   }
   return {}
@@ -67,14 +77,11 @@ onMounted(async () => {
   } catch (e) {
     notify('Could not load your saved settings: ' + errMsg(e))
   }
-  cwd.value = config.defaultLinuxPath || '/root'
   currentUser.value = config.defaultLinuxUser || 'root'
-  try {
-    bootData.value = await App.GetBootData()
-  } catch (e) {
-    notify('Could not read system stats: ' + errMsg(e))
-  }
-  if (bootData.value && !config.welcomeDisabled) ui.showWelcome = true
+  currentDistro.value = config.defaultLinuxDistro || 'default'
+  superUser.value = currentUser.value === 'root'
+  await navigateHome()
+  await refreshSystemStats()
   window.addEventListener('keydown', onKey)
   window.addEventListener('keydown', onNavKey)
 })
@@ -100,6 +107,7 @@ function onKey(e) {
     ui.showHelp = false
     ui.showEditor = false
     ui.showViewer = false
+    ui.showStats = false
     ui.showBackgroundPicker = false
   }
 }
@@ -169,16 +177,49 @@ async function onSetBackground(image, mode) {
 }
 async function onConfigUpdate(partial) {
   Object.assign(config, partial)
+  if (partial.defaultLinuxUser) currentUser.value = partial.defaultLinuxUser
+  if (partial.defaultLinuxDistro) currentDistro.value = partial.defaultLinuxDistro
+}
+async function navigateHome() {
+  try {
+    const home = await App.HomePath(currentUser.value || 'root')
+    navigateTo(home || '/')
+  } catch (e) {
+    notify('Could not resolve home directory: ' + errMsg(e))
+    navigateTo('/')
+  }
+}
+function refreshDesktop() {
+  desktopRefresh.value++
+}
+async function openSystemStats() {
+  await refreshSystemStats()
+  ui.showStats = true
+}
+async function refreshSystemStats() {
+  try {
+    systemStats.value = await App.GetStats()
+  } catch (e) {
+    notify('Could not read system stats: ' + errMsg(e))
+  }
 }
 
 function errMsg(e) {
   return String(e?.message || e || 'unknown error')
+}
+function resolveBackground(background) {
+  if (background === '../assets/images/app-bg-img-1.jpg') return bgImage1
+  if (background === '../assets/images/app-bg-img-2.jpg') return bgImage2
+  return background
 }
 </script>
 
 <template>
   <div class="app-shell" :style="desktopStyle">
     <div class="app-shell__overlay"></div>
+    <Transition name="fade">
+      <div v-if="modalActive" class="modal-frost"></div>
+    </Transition>
 
     <TopBar
       :current-user="currentUser"
@@ -187,19 +228,31 @@ function errMsg(e) {
       :cwd="cwd"
       :can-go-back="canGoBack"
       :can-go-forward="canGoForward"
+      :show-terminal="ui.showTerminal"
+      :show-help="ui.showHelp"
+      :super-user="superUser"
       @navigate="navigateTo"
       @back="navigateBack"
       @forward="navigateForward"
+      @home="navigateHome"
+      @refresh="refreshDesktop"
       @update:user="currentUser = $event"
       @update:distro="currentDistro = $event"
+      @update:super-user="superUser = $event"
       @config-update="onConfigUpdate"
-      @show-welcome="ui.showWelcome = true"
+      @show-stats="openSystemStats"
       @show-background="ui.showBackgroundPicker = true"
+      @toggle-terminal="ui.showTerminal = !ui.showTerminal"
+      @toggle-help="ui.showHelp = !ui.showHelp"
     />
 
     <Desktop
       :cwd="cwd"
       :config="config"
+      :current-user="currentUser"
+      :current-distro="currentDistro"
+      :super-user="superUser"
+      :refresh-key="desktopRefresh"
       @navigate="navigateTo"
       @open-editor="openInEditor"
       @open-viewer="openInViewer"
@@ -214,29 +267,16 @@ function errMsg(e) {
       @toggle-pin="onTogglePin"
     />
 
-    <div class="floating-actions">
-      <button class="fab" :class="{ active: ui.showTerminal }" title="Terminal (Ctrl/Cmd+T)" @click="ui.showTerminal = !ui.showTerminal">
-        <Terminal :size="18" />
-      </button>
-      <button class="fab" :class="{ active: ui.showHelp }" title="Command Help (Ctrl/Cmd+H)" @click="ui.showHelp = !ui.showHelp">
-        <BookOpen :size="18" />
-      </button>
-      <button class="fab" title="Background (Shift+I)" @click="ui.showBackgroundPicker = true">
-        <ImageIcon :size="18" />
-      </button>
-    </div>
-
     <Transition name="fade">
-      <WelcomeScreen
-        v-if="ui.showWelcome"
-        :boot-data="bootData"
-        @close="ui.showWelcome = false"
-        @disable="async (v) => { await App.SetWelcomeDisabled(v); config.welcomeDisabled = v; ui.showWelcome = false }"
+      <SystemStats
+        v-if="ui.showStats"
+        :stats="systemStats"
+        @close="ui.showStats = false"
       />
     </Transition>
 
     <Transition name="terminal-slide">
-      <TerminalDrawer v-if="ui.showTerminal" :cwd="cwd" :user="currentUser" @close="ui.showTerminal = false" @navigate="navigateTo" />
+      <TerminalDrawer v-if="ui.showTerminal" :cwd="cwd" :user="currentUser" :distro="currentDistro" :super-user="superUser" @close="ui.showTerminal = false" @navigate="navigateTo" />
     </Transition>
 
     <Transition name="fade">
@@ -244,11 +284,11 @@ function errMsg(e) {
     </Transition>
 
     <Transition name="scale">
-      <TextEditor v-if="ui.showEditor" :file="editorFile" @close="ui.showEditor = false" />
+      <TextEditor v-if="ui.showEditor" :file="editorFile" :current-user="currentUser" :current-distro="currentDistro" :super-user="superUser" @close="ui.showEditor = false" />
     </Transition>
 
     <Transition name="scale">
-      <FileViewer v-if="ui.showViewer" :file="viewerFile" @close="ui.showViewer = false" />
+      <FileViewer v-if="ui.showViewer" :file="viewerFile" :current-user="currentUser" :current-distro="currentDistro" :super-user="superUser" @close="ui.showViewer = false" />
     </Transition>
 
     <Transition name="scale">
@@ -272,44 +312,22 @@ function errMsg(e) {
 .app-shell__overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(8, 10, 14, 0.45) 0%, rgba(8, 10, 14, 0.2) 30%, rgba(8, 10, 14, 0.5) 100%);
+  background:
+    radial-gradient(90% 70% at 20% 0%, rgba(59, 130, 246, 0.18), transparent 55%),
+    linear-gradient(180deg, rgba(8, 10, 14, 0.58) 0%, rgba(8, 10, 14, 0.32) 30%, rgba(8, 10, 14, 0.66) 100%);
   pointer-events: none;
   z-index: 1;
 }
-
-.floating-actions {
+.modal-frost {
   position: fixed;
-  right: 20px;
-  bottom: 96px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  z-index: 40;
-}
-.fab {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--r-full);
-  border: 1px solid var(--frost-border);
-  background: var(--frost-bg);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  color: var(--text-secondary);
-  display: grid;
-  place-items: center;
-  transition: all var(--t-med) var(--ease);
-  box-shadow: var(--shadow-md);
-}
-.fab:hover {
-  color: var(--text-primary);
-  background: var(--info-100);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-.fab.active {
-  color: #fff;
-  background: var(--accent);
-  border-color: transparent;
+  inset: 0;
+  z-index: 45;
+  background:
+    linear-gradient(135deg, rgba(10, 14, 22, 0.62), rgba(24, 34, 48, 0.34)),
+    rgba(5, 6, 8, 0.28);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  pointer-events: none;
 }
 
 .terminal-slide-enter-active,

@@ -1,14 +1,14 @@
+// Package config provides the functionalities for creating, reading and updating the app app configuration for the WSL2 environment.
 package config
 
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type WSLConfig struct {
-	WelcomeDisabled    bool     `json:"welcomeDisabled"`
-	DefaultLinuxPath   string   `json:"defaultLinuxPath"`
 	DefaultLinuxUser   string   `json:"defaultLinuxUser"`
 	DefaultLinuxDistro string   `json:"defaultLinuxDistro"`
 	PinnedFolders      []string `json:"pinnedFolders"`
@@ -19,56 +19,72 @@ type WSLConfig struct {
 // DefaultWSLConfig provides a default WSLConfig.
 func DefaultWSLConfig() *WSLConfig {
 	return &WSLConfig{
-		DefaultLinuxPath:   "/root",
 		DefaultLinuxUser:   "root",
-		DefaultLinuxDistro: "",
-		WelcomeDisabled:    false,
+		DefaultLinuxDistro: "default",
 		PinnedFolders:      []string{},
 		BackgroundImage:    "",
 		BackgroundMode:     "gradient",
 	}
 }
 
-// LoadWSLConfig loads the app configuration from the config.json file. If the file does not exist or is invalid, it returns the default configuration.
+// LoadWSLConfig loads the app configuration from the config.json file.
 func LoadWSLConfig() (*WSLConfig, error) {
-	config := DefaultWSLConfig()
-
+	cfg := DefaultWSLConfig()
 	data, err := os.ReadFile(configPath())
-
 	if err != nil {
-		return config, err
+		if os.IsNotExist(err) {
+			return cfg, SaveWSLConfig(cfg)
+		}
+		return cfg, err
 	}
 
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
 
-	return config, nil
+	normalize(cfg)
+	return cfg, nil
 }
 
-// SaveWSLConfig saves the app configuration to the config.json file. It ensures that the configuration directory exists and writes the configuration in a pretty-printed JSON format.
-func SaveWSLConfig(config *WSLConfig) error {
+// EnsureWSLConfig creates the config file when it is missing.
+func EnsureWSLConfig() error {
+	_, err := LoadWSLConfig()
+	return err
+}
+
+// SaveWSLConfig saves the app configuration to the config.json file.
+func SaveWSLConfig(cfg *WSLConfig) error {
+	if cfg == nil {
+		cfg = DefaultWSLConfig()
+	}
+	normalize(cfg)
 
 	path := configPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
 }
 
-// SetDefaultLinuxPath gives users the ability to set their choice directory in the app homepage.
-func SetDefaultLinuxPath(path string) error {
-	config, err := LoadWSLConfig()
-	if err != nil {
-		return err
+func normalize(cfg *WSLConfig) {
+	defaults := DefaultWSLConfig()
+	if strings.TrimSpace(cfg.DefaultLinuxUser) == "" {
+		cfg.DefaultLinuxUser = defaults.DefaultLinuxUser
 	}
-	config.DefaultLinuxPath = path
-	return SaveWSLConfig(config)
+	if strings.TrimSpace(cfg.DefaultLinuxDistro) == "" {
+		cfg.DefaultLinuxDistro = defaults.DefaultLinuxDistro
+	}
+	if strings.TrimSpace(cfg.BackgroundMode) == "" {
+		cfg.BackgroundMode = defaults.BackgroundMode
+	}
+	if cfg.PinnedFolders == nil {
+		cfg.PinnedFolders = []string{}
+	}
 }
 
 // SetDefaultLinuxUser gives users the ability to set their choice user as default.
@@ -116,16 +132,6 @@ func SetBackground(image, mode string) (*WSLConfig, error) {
 	config.BackgroundImage = image
 	config.BackgroundMode = mode
 	return config, SaveWSLConfig(config)
-}
-
-// SetWelcomeDisabled gives users the ability to disable the welcome message on app launch.
-func SetWelcomeDisabled(disabled bool) error {
-	config, err := LoadWSLConfig()
-	if err != nil {
-		return err
-	}
-	config.WelcomeDisabled = disabled
-	return SaveWSLConfig(config)
 }
 
 // Helper function to get the path to the config.json configuration file. It constructs the path based on the user's configuration directory, ensuring that the application can read and write its configuration in a consistent location.

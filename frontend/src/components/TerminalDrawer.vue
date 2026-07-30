@@ -6,6 +6,8 @@ import * as App from '../../wailsjs/go/main/App'
 const props = defineProps({
   cwd: String,
   user: String,
+  distro: String,
+  superUser: Boolean,
 })
 const emit = defineEmits(['close', 'navigate'])
 
@@ -17,10 +19,11 @@ const cmdHistory = ref([])
 const historyPos = ref(-1)
 const running = ref(false)
 
-const prompt = computed(() => `${props.user}@wsl:${props.cwd}$`)
+const effectiveUser = computed(() => (props.superUser || props.user === 'root') ? 'root' : props.user)
+const prompt = computed(() => `${effectiveUser.value}@wsl:${props.cwd}${effectiveUser.value === 'root' ? '#' : '$'}`)
 
 onMounted(() => {
-  push({ type: 'sys', text: `ihu terminal — ${props.user} @ ${props.cwd}` })
+  push({ type: 'sys', text: `ihu terminal - ${effectiveUser.value} @ ${props.cwd}` })
   nextTick(() => inputEl.value?.focus())
 })
 
@@ -51,7 +54,11 @@ async function execute(raw) {
   if (cmd === 'cd') {
     const arg = raw.split(/\s+/).slice(1).join(' ').trim()
     if (!arg || arg === '~') {
-      emit('navigate', `/home/${props.user}`)
+      try {
+        emit('navigate', await App.HomePath(props.user))
+      } catch {
+        emit('navigate', '/')
+      }
     } else if (arg.startsWith('/')) {
       emit('navigate', arg)
     } else {
@@ -63,13 +70,17 @@ async function execute(raw) {
 
   running.value = true
   try {
-    const out = await App.RunWSLCommand(raw)
+    const out = await App.RunWSLCommandAs(`cd ${shellQuote(props.cwd || '/')} && (${raw}) 2>&1`, props.distro || '', props.user || '', props.superUser || props.user === 'root')
     push({ type: out ? 'out' : 'sys', text: out || '(no output)' })
   } catch (e) {
     push({ type: 'err', text: String(e?.message || e) })
   } finally {
     running.value = false
   }
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`
 }
 
 function joinPath(base, rel) {
@@ -111,7 +122,7 @@ function clearTerm() { lines.value = [] }
   <div class="term glass-strong">
     <div class="term__bar">
       <div class="term__tabs">
-        <span class="term__tab active">bash — {{ user }}</span>
+        <span class="term__tab active">bash - {{ effectiveUser }}</span>
       </div>
       <div class="term__actions">
         <button class="term__btn" title="Clear" @click="clearTerm"><Trash2 :size="14" /></button>
