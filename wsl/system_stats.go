@@ -17,7 +17,6 @@ type SystemStats struct {
 	CPUUsage    int    `json:"cpuUsage"`
 	MemoryUsage int    `json:"memoryUsage"`
 	DiskUsage   int    `json:"diskUsage"`
-	Temperature int    `json:"temperature"`
 	Timestamp   string `json:"timestamp"`
 }
 
@@ -46,12 +45,6 @@ func GetStats() *SystemStats {
 		stats.DiskUsage = 0
 	} else {
 		stats.DiskUsage = disk
-	}
-
-	if temp, err := getTemperature(); err != nil {
-		stats.Temperature = -1
-	} else {
-		stats.Temperature = temp
 	}
 
 	return &stats
@@ -135,22 +128,6 @@ func getDiskUsage() (int, error) {
 		return 0, err
 	}
 	return clampPercent(value), nil
-}
-
-func getTemperature() (int, error) {
-	temperatureFiles := []string{
-		"/sys/class/thermal/thermal_zone0/temp",
-		"/sys/class/thermal/thermal_zone1/temp",
-	}
-
-	for _, file := range temperatureFiles {
-		if data, err := runOnSession("cat " + file); err == nil && len(data) > 0 {
-			if temp, err := strconv.Atoi(strings.TrimSpace(data)); err == nil {
-				return temp / 1000, nil
-			}
-		}
-	}
-	return 0, fmt.Errorf("no thermal zone found")
 }
 
 func getTimestamp() string {

@@ -4,7 +4,6 @@ import {
   Cpu,
   MemoryStick,
   HardDrive,
-  Thermometer,
   X,
   Sparkles,
   Clock,
@@ -17,9 +16,6 @@ const props = defineProps({
 const emit = defineEmits(["close"]);
 
 const systemStats = computed(() => props.stats || {});
-const temperatureText = computed(() =>
-  systemStats.value.temperature >= 0 ? `${systemStats.value.temperature} C` : "Unavailable",
-);
 const timestampText = computed(() => systemStats.value.timestamp || "-");
 
 function dismiss() {
@@ -93,14 +89,6 @@ function dismiss() {
                 ></div>
               </div>
               <div class="stat__val">{{ systemStats.diskUsage || 0 }}%</div>
-            </div>
-          </div>
-
-          <div class="stat">
-            <Thermometer :size="18" class="stat__icon" />
-            <div class="stat__body">
-              <div class="stat__label">Temperature</div>
-              <div class="stat__val stat__val--big">{{ temperatureText }}</div>
             </div>
           </div>
 
