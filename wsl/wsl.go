@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os/exec"
 	"path"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,20 +115,44 @@ func parseEntries(out, dir string) ([]Entry, error) {
 	return entries, nil
 }
 
+type DefaultHome struct {
+	User string `json:"user"`
+	Home string `json:"home"`
+}
+
+// DefaultHomePath resolves the active WSL environment default user's name and home path.
+//
+// This makes the app boot from the home directory of the default login user managed by WSL2.
+func DefaultHomePath() (*DefaultHome, error) {
+	out, err := runSession("sh -lc 'printf \"%s\\t%s\\n\" \"$(whoami)\" \"$HOME\"'")
+	if err != nil {
+		return nil, err
+	}
+	fields := strings.SplitN(strings.TrimSpace(out), "\t", 2)
+	if len(fields) != 2 || strings.TrimSpace(fields[0]) == "" || strings.TrimSpace(fields[1]) == "" {
+		return nil, fmt.Errorf("could not resolve default WSL home directory")
+	}
+	return &DefaultHome{
+		User: strings.TrimSpace(fields[0]),
+		Home: strings.TrimSpace(fields[1]),
+	}, nil
+}
+
 // HomePath resolves the home directory for a given user inside WSL.
 func HomePath(user string) (string, error) {
-	if strings.TrimSpace(user) == "" {
-		user = "root"
+	user = strings.TrimSpace(user)
+	if user == "" {
+		home, err := DefaultHomePath()
+		if err != nil {
+			return "", err
+		}
+		return home.Home, nil
 	}
-	out, err := runSession("sh -lc " + shellQuote("cd ~"+user+" && pwd"))
-	if err != nil {
-		return "", err
+
+	if user == "root" {
+		return "/root", nil
 	}
-	clean := strings.TrimSpace(out)
-	if clean == "" {
-		return "", fmt.Errorf("could not resolve home directory for user %q", user)
-	}
-	return clean, nil
+	return "/home/" + user, nil
 }
 
 // ListDistros enumerates installed WSL distributions on Windows.
@@ -195,7 +218,6 @@ func ReadFileBase64As(p, distro, user string, elevated bool) (string, error) {
 }
 
 func RunCommandAs(cmd, distro, user string, elevated bool) (string, error) {
-	// if runtimeIsWindows() {
 	args := []string{}
 	if distro != "" && distro != "default" {
 		args = append(args, "-d", distro)
@@ -215,8 +237,7 @@ func RunCommandAs(cmd, distro, user string, elevated bool) (string, error) {
 	if err != nil && clean != "" {
 		return clean, err
 	}
-	// return clean, err
-	// }
+
 	if elevated || user == "root" {
 		return runSession("sudo -n sh -lc " + shellQuote(cmd))
 	}
@@ -240,10 +261,6 @@ func splitNonEmpty(s string) []string {
 		}
 	}
 	return out
-}
-
-func runtimeIsWindows() bool {
-	return runtime.GOOS == "windows"
 }
 
 func cleanWindowsCommandOutput(s string) string {

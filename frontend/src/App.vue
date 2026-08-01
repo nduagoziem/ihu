@@ -16,7 +16,6 @@ import bgImage1 from './assets/images/app-bg-img-1.jpg'
 import bgImage2 from './assets/images/app-bg-img-2.jpg'
 
 const config = reactive({
-  defaultLinuxUser: 'root',
   defaultLinuxDistro: '',
   pinnedFolders: [],
   backgroundImage: '',
@@ -35,8 +34,8 @@ const ui = reactive({
 const { notify } = useToast()
 const editorFile = ref(null)
 const viewerFile = ref(null)
-const cwd = ref('/')
-const currentUser = ref('root')
+const cwd = ref('')
+const currentUser = ref('')
 const currentDistro = ref('')
 const superUser = ref(false)
 const systemStats = ref(null)
@@ -77,10 +76,8 @@ onMounted(async () => {
   } catch (e) {
     notify('Could not load your saved settings: ' + errMsg(e))
   }
-  currentUser.value = config.defaultLinuxUser || 'root'
-  currentDistro.value = config.defaultLinuxDistro || 'default'
-  superUser.value = currentUser.value === 'root'
-  await navigateHome()
+  currentDistro.value = config.defaultLinuxDistro
+  await navigateDefaultHome()
   await refreshSystemStats()
   window.addEventListener('keydown', onKey)
   window.addEventListener('keydown', onNavKey)
@@ -177,16 +174,24 @@ async function onSetBackground(image, mode) {
 }
 async function onConfigUpdate(partial) {
   Object.assign(config, partial)
-  if (partial.defaultLinuxUser) currentUser.value = partial.defaultLinuxUser
   if (partial.defaultLinuxDistro) currentDistro.value = partial.defaultLinuxDistro
 }
 async function navigateHome() {
   try {
-    const home = await App.HomePath(currentUser.value || 'root')
-    navigateTo(home || '/')
+    const home = await App.HomePath(currentUser.value)
+    navigateTo(home || "/")
   } catch (e) {
-    notify('Could not resolve home directory: ' + errMsg(e))
-    navigateTo('/')
+    notify(errMsg(e))
+  }
+}
+async function navigateDefaultHome() {
+  try {
+    const home = await App.DefaultHomePath()
+    currentUser.value = home?.user
+    superUser.value = currentUser.value === 'root'
+    navigateTo(home?.home)
+  } catch (e) {
+    notify(errMsg(e))
   }
 }
 function refreshDesktop() {

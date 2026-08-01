@@ -52,14 +52,6 @@ func (a *App) GetConfig() (*config.WSLConfig, error) {
 	return config.LoadWSLConfig()
 }
 
-// SetDefaultLinuxUser persists the chosen default user.
-func (a *App) SetDefaultLinuxUser(user string) (*config.WSLConfig, error) {
-	if err := config.SetDefaultLinuxUser(user); err != nil {
-		return nil, err
-	}
-	return config.LoadWSLConfig()
-}
-
 // SetDefaultLinuxDistro persists the chosen default distro.
 func (a *App) SetDefaultLinuxDistro(distro string) (*config.WSLConfig, error) {
 	if err := config.SetDefaultLinuxDistro(distro); err != nil {
@@ -96,6 +88,11 @@ func (a *App) ListDirAs(dir, distro, user string, elevated bool) ([]wsl.Entry, e
 // HomePath resolves the home directory for a user.
 func (a *App) HomePath(user string) (string, error) {
 	return wsl.HomePath(user)
+}
+
+// DefaultHomePath resolves the active WSL default user's home directory.
+func (a *App) DefaultHomePath() (*wsl.DefaultHome, error) {
+	return wsl.DefaultHomePath()
 }
 
 // ListDistros enumerates installed WSL distributions.

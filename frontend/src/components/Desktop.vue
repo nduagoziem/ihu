@@ -19,19 +19,26 @@ const error = ref('')
 const selected = ref(null)
 const showHidden = ref(false)
 const selectedAt = ref({ x: 0, y: 0, time: 0 })
+let loadId = 0
 
 onMounted(load)
 watch(() => [props.cwd, props.currentUser, props.currentDistro, props.superUser, props.refreshKey], load)
 
 async function load() {
+  const id = ++loadId
   loading.value = true
   error.value = ''
   try {
-    entries.value = await App.ListDirAs(props.cwd, props.currentDistro || '', props.currentUser || '', props.superUser || props.currentUser === 'root')
+    const nextEntries = await App.ListDirAs(props.cwd, props.currentDistro || '', props.currentUser || '', props.superUser || props.currentUser === 'root')
+    if (id !== loadId) return
+    entries.value = nextEntries
+    selected.value = null
   } catch (e) {
+    if (id !== loadId) return
     error.value = String(e?.message || e || 'Failed to load directory')
     entries.value = []
   } finally {
+    if (id !== loadId) return
     loading.value = false
   }
 }

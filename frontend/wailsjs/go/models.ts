@@ -1,7 +1,6 @@
 export namespace config {
 	
 	export class WSLConfig {
-	    defaultLinuxUser: string;
 	    defaultLinuxDistro: string;
 	    pinnedFolders: string[];
 	    backgroundImage: string;
@@ -13,7 +12,6 @@ export namespace config {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.defaultLinuxUser = source["defaultLinuxUser"];
 	        this.defaultLinuxDistro = source["defaultLinuxDistro"];
 	        this.pinnedFolders = source["pinnedFolders"];
 	        this.backgroundImage = source["backgroundImage"];
@@ -25,6 +23,20 @@ export namespace config {
 
 export namespace wsl {
 	
+	export class DefaultHome {
+	    user: string;
+	    home: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DefaultHome(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.user = source["user"];
+	        this.home = source["home"];
+	    }
+	}
 	export class Entry {
 	    name: string;
 	    path: string;
@@ -58,7 +70,6 @@ export namespace wsl {
 	    cpuUsage: number;
 	    memoryUsage: number;
 	    diskUsage: number;
-	    temperature: number;
 	    timestamp: string;
 	
 	    static createFrom(source: any = {}) {
@@ -73,7 +84,6 @@ export namespace wsl {
 	        this.cpuUsage = source["cpuUsage"];
 	        this.memoryUsage = source["memoryUsage"];
 	        this.diskUsage = source["diskUsage"];
-	        this.temperature = source["temperature"];
 	        this.timestamp = source["timestamp"];
 	    }
 	}

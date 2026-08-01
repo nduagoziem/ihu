@@ -20,7 +20,6 @@ const emit = defineEmits(['navigate', 'back', 'forward', 'home', 'refresh', 'upd
 const distros = ref([])
 const users = ref([])
 const openMenu = ref(null)
-const makeDefaultUser = ref(false)
 const makeDefaultDistro = ref(false)
 const pathInput = ref(props.cwd)
 const { notify } = useToast()
@@ -57,15 +56,12 @@ function closeMenus() { openMenu.value = null }
 async function chooseUser(u) {
   emit('update:user', u)
   emit('update:super-user', u === 'root')
-  if (makeDefaultUser.value) {
-    await setDefaultUser(u)
-    makeDefaultUser.value = false
-  }
   try {
     const home = await App.HomePath(u)
     emit('navigate', home)
+    emit('refresh')
   } catch (e) {
-    notify('Could not resolve home directory: ' + errStr(e))
+    notify(errStr(e))
   }
   closeMenus()
 }
@@ -77,15 +73,6 @@ async function chooseDistro(d) {
   }
   closeMenus()
 }
-async function setDefaultUser(user = props.currentUser) {
-  if (!user) return
-  try {
-    const cfg = await App.SetDefaultLinuxUser(user)
-    if (cfg) emit('config-update', { defaultLinuxUser: cfg.defaultLinuxUser })
-  } catch (e) {
-    notify('Could not set default user: ' + errStr(e))
-  }
-}
 async function setDefaultDistro(distro = props.currentDistro) {
   if (!distro) return
   try {
@@ -94,9 +81,6 @@ async function setDefaultDistro(distro = props.currentDistro) {
   } catch (e) {
     notify('Could not set default distro: ' + errStr(e))
   }
-}
-async function onDefaultUserToggle() {
-  if (makeDefaultUser.value) await setDefaultUser()
 }
 async function onDefaultDistroToggle() {
   if (makeDefaultDistro.value) await setDefaultDistro()
@@ -193,10 +177,6 @@ function errStr(e) {
                 <span>{{ u }}</span>
               </button>
             </div>
-            <label class="menu__default">
-              <input type="checkbox" v-model="makeDefaultUser" @change="onDefaultUserToggle" />
-              Set current as default
-            </label>
           </div>
         </Transition>
       </div>

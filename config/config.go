@@ -9,7 +9,6 @@ import (
 )
 
 type WSLConfig struct {
-	DefaultLinuxUser   string   `json:"defaultLinuxUser"`
 	DefaultLinuxDistro string   `json:"defaultLinuxDistro"`
 	PinnedFolders      []string `json:"pinnedFolders"`
 	BackgroundImage    string   `json:"backgroundImage"`
@@ -19,7 +18,6 @@ type WSLConfig struct {
 // DefaultWSLConfig provides a default WSLConfig.
 func DefaultWSLConfig() *WSLConfig {
 	return &WSLConfig{
-		DefaultLinuxUser:   "root",
 		DefaultLinuxDistro: "default",
 		PinnedFolders:      []string{},
 		BackgroundImage:    "",
@@ -73,9 +71,6 @@ func SaveWSLConfig(cfg *WSLConfig) error {
 
 func normalize(cfg *WSLConfig) {
 	defaults := DefaultWSLConfig()
-	if strings.TrimSpace(cfg.DefaultLinuxUser) == "" {
-		cfg.DefaultLinuxUser = defaults.DefaultLinuxUser
-	}
 	if strings.TrimSpace(cfg.DefaultLinuxDistro) == "" {
 		cfg.DefaultLinuxDistro = defaults.DefaultLinuxDistro
 	}
@@ -85,16 +80,6 @@ func normalize(cfg *WSLConfig) {
 	if cfg.PinnedFolders == nil {
 		cfg.PinnedFolders = []string{}
 	}
-}
-
-// SetDefaultLinuxUser gives users the ability to set their choice user as default.
-func SetDefaultLinuxUser(user string) error {
-	config, err := LoadWSLConfig()
-	if err != nil {
-		return err
-	}
-	config.DefaultLinuxUser = user
-	return SaveWSLConfig(config)
 }
 
 // SetDefaultLinuxDistro gives users the ability to set their choice distro as default.
