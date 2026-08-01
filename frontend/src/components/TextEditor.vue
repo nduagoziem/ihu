@@ -2,18 +2,7 @@
 import { ref, watch, onMounted, computed } from 'vue'
 import { X, Save, FileText } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
-import hljs from 'highlight.js/lib/core'
-import bash from 'highlight.js/lib/languages/bash'
-import go from 'highlight.js/lib/languages/go'
-import javascript from 'highlight.js/lib/languages/javascript'
-import markdown from 'highlight.js/lib/languages/markdown'
-import json from 'highlight.js/lib/languages/json'
-
-hljs.registerLanguage('bash', bash)
-hljs.registerLanguage('go', go)
-hljs.registerLanguage('javascript', javascript)
-hljs.registerLanguage('markdown', markdown)
-hljs.registerLanguage('json', json)
+import hljs from 'highlight.js'
 
 const props = defineProps({
   file: Object,
@@ -44,7 +33,10 @@ const lang = computed(() => {
 const highlighted = computed(() => {
   if (dirty.value) return escapeHtml(edited.value)
   try {
-    return hljs.highlight(content.value, { language: lang.value }).value
+    if (hljs.getLanguage(lang.value)) {
+      return hljs.highlight(content.value, { language: lang.value, ignoreIllegals: true }).value
+    }
+    return hljs.highlightAuto(content.value).value
   } catch {
     return escapeHtml(content.value)
   }
