@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,12 +33,9 @@ func (b *BootWSL) Boot() (string, error) {
 	defer b.mu.Unlock()
 
 	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// Launching a clean interactive shell profile
-		cmd = exec.Command("wsl.exe", "sh", "-lc", "exec bash --noprofile --norc")
-	} else {
-		cmd = exec.Command("bash", "--noprofile", "--norc")
-	}
+	// Launching a clean interactive shell profile
+	cmd = exec.Command("wsl.exe", "sh", "-lc", "exec bash --noprofile --norc")
+
 	HideTerminalApps(cmd)
 
 	inputPipe, err := cmd.StdinPipe()

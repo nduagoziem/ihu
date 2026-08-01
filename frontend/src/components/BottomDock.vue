@@ -20,14 +20,14 @@ onMounted(async () => {
   try {
     homePath.value = await App.HomePath(props.currentUser)
   } catch (e) {
-    notify('Could not resolve home directory: ' + errStr(e))
+    notify(errStr(e))
   }
 })
 watch(() => props.currentUser, async (u) => {
   try {
     homePath.value = await App.HomePath(u)
   } catch (e) {
-    notify('Could not resolve home directory: ' + errStr(e))
+    notify(errStr(e))
   }
 })
 
