@@ -1,7 +1,11 @@
 <script setup>
-import { ref, nextTick, onMounted, computed } from 'vue'
-import { X, CornerDownLeft, Trash2 } from '@lucide/vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { X, Trash2, RotateCw } from '@lucide/vue'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import '@xterm/xterm/css/xterm.css'
 import * as App from '../../wailsjs/go/main/App'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 
 const props = defineProps({
   cwd: String,
@@ -9,113 +13,111 @@ const props = defineProps({
   distro: String,
   superUser: Boolean,
 })
-const emit = defineEmits(['close', 'navigate'])
+const emit = defineEmits(['close'])
 
-const lines = ref([])
-const input = ref('')
-const inputEl = ref(null)
-const scrollEl = ref(null)
-const cmdHistory = ref([])
-const historyPos = ref(-1)
-const running = ref(false)
+const termEl = ref(null)
+const exited = ref(false)
+
+let term = null
+let fit = null
+let resizeObserver = null
+let disposed = false
 
 const effectiveUser = computed(() => (props.superUser || props.user === 'root') ? 'root' : props.user)
-const prompt = computed(() => `${effectiveUser.value}@wsl:${props.cwd}${effectiveUser.value === 'root' ? '#' : '$'}`)
 
-onMounted(() => {
-  push({ type: 'sys', text: `ihu terminal - ${effectiveUser.value} @ ${props.cwd}` })
-  nextTick(() => inputEl.value?.focus())
+// xterm theme aligned with the app's design tokens (see style.css).
+const theme = {
+  background: 'rgba(0, 0, 0, 0)',
+  foreground: '#c8d3e0',
+  cursor: '#2dd4bf',
+  cursorAccent: '#0b0f17',
+  selectionBackground: 'rgba(45, 212, 191, 0.28)',
+  black: '#1b2130', red: '#fb7185', green: '#2dd4bf', yellow: '#e5c07b',
+  blue: '#61afef', magenta: '#c678dd', cyan: '#56b6c2', white: '#c8d3e0',
+  brightBlack: '#5c6672', brightRed: '#fb7185', brightGreen: '#2dd4bf',
+  brightYellow: '#e5c07b', brightBlue: '#61afef', brightMagenta: '#c678dd',
+  brightCyan: '#56b6c2', brightWhite: '#f2f5fa',
+}
+
+onMounted(async () => {
+  term = new Terminal({
+    fontFamily: '"SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code", Menlo, monospace',
+    fontSize: 13,
+    lineHeight: 1.2,
+    cursorBlink: true,
+    allowProposedApi: true,
+    theme,
+  })
+  fit = new FitAddon()
+  term.loadAddon(fit)
+  term.open(termEl.value)
+  fit.fit()
+
+  // Keystrokes (including Ctrl-C as 0x03) flow straight to the pseudoconsole.
+  term.onData((d) => { App.TerminalWrite(d).catch(() => {}) })
+
+  // Pseudoconsole output — raw ANSI/VT bytes — written verbatim to xterm.
+  EventsOn('terminal:data', (chunk) => { term?.write(chunk) })
+  EventsOn('terminal:exit', () => {
+    exited.value = true
+    term?.write('\r\n\x1b[2m[process exited]\x1b[0m\r\n')
+  })
+
+  await startSession()
+
+  resizeObserver = new ResizeObserver(() => doFit())
+  resizeObserver.observe(termEl.value)
+
+  term.focus()
 })
 
-function push(line) {
-  lines.value.push(line)
-  nextTick(() => {
-    if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
-  })
-}
+onBeforeUnmount(() => {
+  disposed = true
+  EventsOff('terminal:data')
+  EventsOff('terminal:exit')
+  resizeObserver?.disconnect()
+  App.TerminalStop().catch(() => {})
+  term?.dispose()
+  term = null
+})
 
-async function run() {
-  const raw = input.value.trim()
-  if (!raw || running.value) return
-  cmdHistory.value.push(raw)
-  historyPos.value = cmdHistory.value.length
-  push({ type: 'cmd', text: raw, prompt: prompt.value })
-  input.value = ''
-  await execute(raw)
-}
-
-async function execute(raw) {
-  const cmd = raw.split(/\s+/)[0]
-  if (cmd === 'clear' || cmd === 'cls') { lines.value = []; return }
-  if (cmd === 'help') {
-    push({ type: 'out', text: 'Builtin: clear, help. Everything else runs in the live WSL shell. Use the folder grid for cd.' })
-    return
-  }
-  if (cmd === 'cd') {
-    const arg = raw.split(/\s+/).slice(1).join(' ').trim()
-    if (!arg || arg === '~') {
-      try {
-        emit('navigate', await App.HomePath(props.user))
-      } catch {
-        emit('navigate', '/')
-      }
-    } else if (arg.startsWith('/')) {
-      emit('navigate', arg)
-    } else {
-      emit('navigate', joinPath(props.cwd, arg))
-    }
-    push({ type: 'sys', text: 'Changed directory — use the grid or path bar to view contents.' })
-    return
-  }
-
-  running.value = true
+async function startSession() {
+  exited.value = false
+  const { cols, rows } = term
   try {
-    const out = await App.RunWSLCommandAs(`cd ${shellQuote(props.cwd || '/')} && (${raw}) 2>&1`, props.distro || '', props.user || '', props.superUser || props.user === 'root')
-    push({ type: out ? 'out' : 'sys', text: out || '(no output)' })
+    await App.TerminalStart(
+      props.distro || '',
+      props.user || '',
+      props.cwd || '',
+      props.superUser || props.user === 'root',
+      cols,
+      rows,
+    )
   } catch (e) {
-    push({ type: 'err', text: String(e?.message || e) })
-  } finally {
-    running.value = false
+    term?.write(`\r\n\x1b[31m${String(e?.message || e)}\x1b[0m\r\n`)
+    exited.value = true
   }
 }
 
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`
+function doFit() {
+  if (disposed || !fit || !term) return
+  try {
+    fit.fit()
+    App.TerminalResize(term.cols, term.rows).catch(() => {})
+  } catch { /* element not measurable yet */ }
 }
 
-function joinPath(base, rel) {
-  if (rel === '.') return base
-  if (rel === '..') return base.split('/').slice(0, -1).join('/') || '/'
-  const parts = base.split('/').filter(Boolean)
-  for (const seg of rel.split('/')) {
-    if (!seg || seg === '.') continue
-    if (seg === '..') parts.pop()
-    else parts.push(seg)
-  }
-  return '/' + parts.join('/')
+async function restart() {
+  await App.TerminalStop().catch(() => {})
+  term?.reset()
+  await startSession()
+  term?.focus()
 }
 
-function onKeydown(e) {
-  if (e.key === 'Enter') { run() }
-  else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    if (historyPos.value > 0) {
-      historyPos.value--
-      input.value = cmdHistory.value[historyPos.value] || ''
-    }
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    if (historyPos.value < cmdHistory.value.length - 1) {
-      historyPos.value++
-      input.value = cmdHistory.value[historyPos.value] || ''
-    } else {
-      historyPos.value = cmdHistory.value.length
-      input.value = ''
-    }
-  }
+function clearTerm() {
+  term?.clear()
+  term?.focus()
 }
-
-function clearTerm() { lines.value = [] }
 </script>
 
 <template>
@@ -125,36 +127,13 @@ function clearTerm() { lines.value = [] }
         <span class="term__tab active">bash - {{ effectiveUser }}</span>
       </div>
       <div class="term__actions">
+        <button v-if="exited" class="term__btn" title="Restart session" @click="restart"><RotateCw :size="14" /></button>
         <button class="term__btn" title="Clear" @click="clearTerm"><Trash2 :size="14" /></button>
         <button class="term__btn" title="Close (Ctrl/Cmd+T)" @click="emit('close')"><X :size="16" /></button>
       </div>
     </div>
 
-    <div class="term__body" ref="scrollEl" @click="inputEl?.focus()">
-      <div v-for="(line, i) in lines" :key="i" class="term__line" :class="'term__line--' + line.type">
-        <template v-if="line.type === 'cmd'">
-          <span class="term__prompt">{{ line.prompt }}</span>
-          <span class="term__cmd-text">{{ line.text }}</span>
-        </template>
-        <template v-else>
-          <pre class="term__out">{{ line.text }}</pre>
-        </template>
-      </div>
-    </div>
-
-    <div class="term__input-row">
-      <span class="term__prompt">{{ prompt }}</span>
-      <input
-        ref="inputEl"
-        v-model="input"
-        class="term__input"
-        spellcheck="false"
-        autocomplete="off"
-        :disabled="running"
-        @keydown="onKeydown"
-      />
-      <CornerDownLeft :size="14" class="term__enter" />
-    </div>
+    <div class="term__body" ref="termEl"></div>
   </div>
 </template>
 
@@ -196,33 +175,16 @@ function clearTerm() { lines.value = [] }
 
 .term__body {
   flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.55;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px 10px 4px;
 }
-.term__line { white-space: pre-wrap; word-break: break-word; margin-bottom: 4px; }
-.term__line--cmd { display: flex; gap: 8px; align-items: baseline; }
-.term__prompt { color: var(--teal); flex-shrink: 0; }
-.term__cmd-text { color: var(--text-primary); }
-.term__out { margin: 0; color: var(--text-secondary); font-family: inherit; }
-.term__line--sys .term__out { color: var(--text-muted); font-style: italic; }
-.term__line--err .term__out { color: var(--rose); }
-.term__line--out .term__out { color: #c8d3e0; }
-
-.term__input-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(0, 0, 0, 0.2);
+/* Let the xterm viewport blend with the glass drawer instead of its own bg. */
+.term__body :deep(.xterm),
+.term__body :deep(.xterm-viewport) {
+  background: transparent !important;
 }
-.term__input {
-  flex: 1;
-  background: transparent; border: none; outline: none;
-  color: var(--text-primary);
-  font-family: var(--font-mono); font-size: 13px;
+.term__body :deep(.xterm-viewport) {
+  scrollbar-width: thin;
 }
-.term__input:disabled { opacity: 0.5; }
-.term__enter { color: var(--text-muted); flex-shrink: 0; }
 </style>

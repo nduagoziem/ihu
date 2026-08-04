@@ -7,12 +7,14 @@ import (
 	"ihu/boot"
 	"ihu/config"
 	"ihu/wsl"
+	"ihu/wsl/terminal"
 )
 
 // App struct
 type App struct {
-	ctx  context.Context
-	boot *boot.BootWSL
+	ctx      context.Context
+	boot     *boot.BootWSL
+	terminal *terminal.Terminal
 }
 
 // NewApp creates a new App application struct
@@ -26,6 +28,7 @@ func NewApp() *App {
 // so we can call the runtime methods.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.terminal = terminal.New(ctx)
 	if a.boot == nil {
 		a.boot = &boot.BootWSL{}
 	}
@@ -36,6 +39,9 @@ func (a *App) startup(ctx context.Context) {
 
 // shutdown closes the live WSL session when the window is closing.
 func (a *App) shutdown(ctx context.Context) {
+	if a.terminal != nil {
+		_ = a.terminal.Stop()
+	}
 	if a.boot != nil {
 		a.boot.Close()
 		return
@@ -155,4 +161,39 @@ func (a *App) ReadFileBase64(path string) (string, error) {
 
 func (a *App) ReadFileBase64As(path, distro, user string, elevated bool) (string, error) {
 	return wsl.ReadFileBase64As(path, distro, user, elevated)
+}
+
+// --- Terminal (ConPTY) -----------------------------------------------------
+
+// TerminalStart launches a live ConPTY-backed WSL shell session. Output streams
+// to the frontend via the "terminal:data" event; "terminal:exit" fires on end.
+func (a *App) TerminalStart(distro, user, cwd string, elevated bool, cols, rows int) error {
+	if a.terminal == nil {
+		return fmt.Errorf("terminal is not initialized")
+	}
+	return a.terminal.Start(distro, user, cwd, elevated, cols, rows)
+}
+
+// TerminalWrite forwards raw input bytes (keystrokes, incl. Ctrl-C) to the shell.
+func (a *App) TerminalWrite(data string) error {
+	if a.terminal == nil {
+		return fmt.Errorf("terminal is not initialized")
+	}
+	return a.terminal.Write(data)
+}
+
+// TerminalResize matches the pseudoconsole viewport to the frontend size.
+func (a *App) TerminalResize(cols, rows int) error {
+	if a.terminal == nil {
+		return nil
+	}
+	return a.terminal.Resize(cols, rows)
+}
+
+// TerminalStop terminates the current terminal session, if any.
+func (a *App) TerminalStop() error {
+	if a.terminal == nil {
+		return nil
+	}
+	return a.terminal.Stop()
 }

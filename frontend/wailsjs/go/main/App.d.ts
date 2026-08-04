@@ -35,6 +35,14 @@ export function SetBackground(arg1:string,arg2:string):Promise<config.WSLConfig>
 
 export function SetDefaultLinuxDistro(arg1:string):Promise<config.WSLConfig>;
 
+export function TerminalResize(arg1:number,arg2:number):Promise<void>;
+
+export function TerminalStart(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:number,arg6:number):Promise<void>;
+
+export function TerminalStop():Promise<void>;
+
+export function TerminalWrite(arg1:string):Promise<void>;
+
 export function TogglePinnedFolder(arg1:string):Promise<config.WSLConfig>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

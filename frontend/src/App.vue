@@ -281,7 +281,7 @@ function resolveBackground(background) {
     </Transition>
 
     <Transition name="terminal-slide">
-      <TerminalDrawer v-if="ui.showTerminal" :cwd="cwd" :user="currentUser" :distro="currentDistro" :super-user="superUser" @close="ui.showTerminal = false" @navigate="navigateTo" />
+      <TerminalDrawer v-if="ui.showTerminal" :cwd="cwd" :user="currentUser" :distro="currentDistro" :super-user="superUser" @close="ui.showTerminal = false" />
     </Transition>
 
     <Transition name="fade">

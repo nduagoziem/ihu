@@ -66,6 +66,22 @@ export function SetDefaultLinuxDistro(arg1) {
   return window['go']['main']['App']['SetDefaultLinuxDistro'](arg1);
 }
 
+export function TerminalResize(arg1, arg2) {
+  return window['go']['main']['App']['TerminalResize'](arg1, arg2);
+}
+
+export function TerminalStart(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['TerminalStart'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function TerminalStop() {
+  return window['go']['main']['App']['TerminalStop']();
+}
+
+export function TerminalWrite(arg1) {
+  return window['go']['main']['App']['TerminalWrite'](arg1);
+}
+
 export function TogglePinnedFolder(arg1) {
   return window['go']['main']['App']['TogglePinnedFolder'](arg1);
 }
