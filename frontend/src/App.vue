@@ -59,8 +59,12 @@ const desktopStyle = computed(() => {
     if (mode === 'gradient') {
       return { backgroundImage: resolvedBackground }
     }
+    const backgroundImage = resolvedBackground === bgImage2
+      ? `linear-gradient(135deg, rgba(5, 8, 12, 0.32), rgba(20, 32, 46, 0.2), rgba(5, 6, 8, 0.28)), url("${resolvedBackground}")`
+      : `url("${resolvedBackground}")`
+
     return {
-      backgroundImage: `linear-gradient(135deg, rgba(5, 8, 12, 0.78), rgba(20, 32, 46, 0.58), rgba(5, 6, 8, 0.74)), url("${resolvedBackground}")`,
+      backgroundImage,
       backgroundSize: mode === 'cover' ? 'cover' : 'contain',
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',

@@ -4,8 +4,6 @@
 //
 // The shell session here is different from the WSL2 shell session in boot/boot.go. The WSL2 shell session in boot/boot.go is a long-lived session that runs commands in the background for visualizing the WSL2 environment, while the terminal shell session is a short-lived session where users can run linux commands in the foreground.
 //
-// Utility programs like `vim`, `htop`, `nano`, and other visual tools, are not supported. They are handled by the GUI, which provides a better experience for these programs.
-//
 // The session is backed by a Windows ConPTY (see conpty_windows.go). Attaching
 // `wsl.exe` to a pseudoconsole gives it a real TTY, so WSL2 allocates a genuine
 // Linux pty inside the distro. That is what makes Ctrl-C (SIGINT), isatty()
