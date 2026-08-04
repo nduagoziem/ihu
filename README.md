@@ -1,8 +1,12 @@
-# README
+# ihu
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENCE)
+
+A GUI for WSL2.
 
 ## About
 
-This is the official Wails Vue template.
+Built with the Wails Vue template (Go + Vue).
 
 You can configure the project by editing `wails.json`. More information about the project settings can be found
 here: https://wails.io/docs/reference/project-config
