@@ -82,13 +82,13 @@ ihu/
 ```
 
 **Convention:** each new backend feature becomes a package under `wsl/`. For example, the Docker
-dashboard goes in `wsl/docker/`, the storage cleaner in `wsl/storage/`, and so on — then it's wired
+dashboard goes in `wsl/docker/`, and so on — then it's wired
 into the UI through `app.go` and a Vue component.
 
 ## Roadmap
 
 The mission is to make more of WSL2 *visual*. These are ordered by necessity, and **anyone is welcome
-to pick one up** — the suggested home for each is noted.
+to pick one up.**
 
 1. **Storage Cleaner** — a visual utility to reclaim space, since the WSL2 `.vhdx`
    disk image can grow very large over time.
@@ -104,7 +104,7 @@ to pick one up** — the suggested home for each is noted.
 
 ## Contributing
 
-Contributions are welcome — grab a roadmap item, follow the `wsl/<feature>/` e.g `wsl/docker/` convention, and open a PR.
+Contributions are welcome — grab a roadmap item, follow the `wsl/<feature>/` convention, and open a PR.
 Built with the [Wails](https://wails.io/) Vue template.
 
 ## License
