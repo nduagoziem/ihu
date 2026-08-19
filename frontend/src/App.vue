@@ -12,6 +12,7 @@ import CommandHelp from './components/CommandHelp.vue'
 import TextEditor from './components/TextEditor.vue'
 import FileViewer from './components/FileViewer.vue'
 import BackgroundPicker from './components/BackgroundPicker.vue'
+import ReclaimSpace from './components/ReclaimSpace.vue'
 import bgImage1 from './assets/images/app-bg-img-1.jpg'
 import bgImage2 from './assets/images/app-bg-img-2.jpg'
 
@@ -29,7 +30,12 @@ const ui = reactive({
   showEditor: false,
   showViewer: false,
   showBackgroundPicker: false,
+  showReclaim: false,
 })
+
+// reclaimBusy is true while a space-reclaim operation is mid-flight. It hard
+// locks the rest of the app: no shortcuts, no dismissing, no other panels.
+const reclaimBusy = ref(false)
 
 const { notify } = useToast()
 const editorFile = ref(null)
@@ -48,6 +54,7 @@ const modalActive = computed(() => (
   || ui.showEditor
   || ui.showViewer
   || ui.showBackgroundPicker
+  || ui.showReclaim
 ))
 
 const desktopStyle = computed(() => {
@@ -93,6 +100,8 @@ onBeforeUnmount(() => {
 })
 
 function onKey(e) {
+  // While a reclaim is running the whole app is locked — swallow shortcuts.
+  if (reclaimBusy.value) return
   const mod = e.ctrlKey || e.metaKey
   if (mod && e.key.toLowerCase() === 't') {
     e.preventDefault()
@@ -110,11 +119,13 @@ function onKey(e) {
     ui.showViewer = false
     ui.showStats = false
     ui.showBackgroundPicker = false
+    ui.showReclaim = false
   }
 }
 
 function onNavKey(e) {
-  if (ui.showTerminal || ui.showHelp || ui.showEditor || ui.showViewer || ui.showBackgroundPicker) return
+  if (reclaimBusy.value) return
+  if (ui.showTerminal || ui.showHelp || ui.showEditor || ui.showViewer || ui.showBackgroundPicker || ui.showReclaim) return
   if (!e.altKey) return
   if (e.key === 'ArrowLeft') {
     e.preventDefault()
@@ -205,6 +216,28 @@ async function openSystemStats() {
   await refreshSystemStats()
   ui.showStats = true
 }
+
+// openReclaim closes every other panel first so the reclaim modal owns the
+// screen, then opens it. The actual app-wide lock kicks in once the operation
+// starts (see onReclaimBusy).
+function openReclaim() {
+  ui.showStats = false
+  ui.showTerminal = false
+  ui.showHelp = false
+  ui.showEditor = false
+  ui.showViewer = false
+  ui.showBackgroundPicker = false
+  ui.showReclaim = true
+}
+function onReclaimBusy(busy) {
+  reclaimBusy.value = busy
+}
+async function onReclaimClosed() {
+  ui.showReclaim = false
+  // The WSL session was torn down and restarted; refresh the environment view.
+  await refreshSystemStats()
+  refreshDesktop()
+}
 async function refreshSystemStats() {
   try {
     systemStats.value = await App.GetStats()
@@ -251,6 +284,7 @@ function resolveBackground(background) {
       @config-update="onConfigUpdate"
       @show-stats="openSystemStats"
       @show-background="ui.showBackgroundPicker = true"
+      @show-reclaim="openReclaim"
       @toggle-terminal="ui.showTerminal = !ui.showTerminal"
       @toggle-help="ui.showHelp = !ui.showHelp"
     />
@@ -304,6 +338,19 @@ function resolveBackground(background) {
       <BackgroundPicker v-if="ui.showBackgroundPicker" :config="config" @apply="onSetBackground" @close="ui.showBackgroundPicker = false" />
     </Transition>
 
+    <Transition name="scale">
+      <ReclaimSpace
+        v-if="ui.showReclaim"
+        :distro="currentDistro"
+        @busy="onReclaimBusy"
+        @close="onReclaimClosed"
+      />
+    </Transition>
+
+    <!-- Hard app-wide lock while a reclaim operation is in flight. Sits above
+         everything except the reclaim modal and swallows all interaction. -->
+    <div v-if="reclaimBusy" class="busy-lock" @click.stop @contextmenu.prevent></div>
+
     <ToastStack />
   </div>
 </template>
@@ -337,6 +384,13 @@ function resolveBackground(background) {
   backdrop-filter: blur(18px) saturate(170%);
   -webkit-backdrop-filter: blur(18px) saturate(170%);
   pointer-events: none;
+}
+.busy-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 105;
+  cursor: wait;
+  background: transparent;
 }
 
 .terminal-slide-enter-active,

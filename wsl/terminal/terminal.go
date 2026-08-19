@@ -1,5 +1,3 @@
-//go:build windows
-
 // Package terminal is a PTY (Pseudo-Terminal) that provides an interface for running linux commands directly on the app.
 //
 // The shell session here is different from the WSL2 shell session in boot/boot.go. The WSL2 shell session in boot/boot.go is a long-lived session that runs commands in the background for visualizing the WSL2 environment, while the terminal shell session is a short-lived session where users can run linux commands in the foreground.

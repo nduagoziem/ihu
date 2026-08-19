@@ -50,6 +50,10 @@ export function ReadFileBase64As(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ReadFileBase64As'](arg1, arg2, arg3, arg4);
 }
 
+export function ReclaimSpace(arg1) {
+  return window['go']['main']['App']['ReclaimSpace'](arg1);
+}
+
 export function RunWSLCommand(arg1) {
   return window['go']['main']['App']['RunWSLCommand'](arg1);
 }

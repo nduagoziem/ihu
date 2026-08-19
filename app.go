@@ -7,7 +7,10 @@ import (
 	"ihu/boot"
 	"ihu/config"
 	"ihu/wsl"
+	"ihu/wsl/janitor"
 	"ihu/wsl/terminal"
+
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -161,6 +164,21 @@ func (a *App) ReadFileBase64(path string) (string, error) {
 
 func (a *App) ReadFileBase64As(path, distro, user string, elevated bool) (string, error) {
 	return wsl.ReadFileBase64As(path, distro, user, elevated)
+}
+
+// --- Janitor --------------------------------------------------------------
+
+// ReclaimSpace trims and compacts the WSL virtual disk for the given distro
+// (empty or "default" targets the default distribution) and returns how much
+// space was returned to Windows. Compaction requires elevation, so a UAC
+// prompt appears mid-run. Progress messages stream to the frontend via the
+// "janitor:progress" event.
+func (a *App) ReclaimSpace(distro string) (*janitor.Result, error) {
+	return janitor.Clean(distro, func(msg string) {
+		if a.ctx != nil {
+			wruntime.EventsEmit(a.ctx, "janitor:progress", msg)
+		}
+	})
 }
 
 // --- Terminal (ConPTY) -----------------------------------------------------

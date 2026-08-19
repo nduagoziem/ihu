@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { ChevronLeft, ChevronRight, ChevronDown, Check, Home, Eye, RefreshCw, Image as ImageIcon, Terminal, BookOpen, Shield } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, ChevronDown, Check, Home, Eye, RefreshCw, Image as ImageIcon, Terminal, BookOpen, Shield, HardDriveDownload } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
 import { useToast } from '../composables/useToast'
 
@@ -15,7 +15,7 @@ const props = defineProps({
   showHelp: Boolean,
   superUser: Boolean,
 })
-const emit = defineEmits(['navigate', 'back', 'forward', 'home', 'refresh', 'update:user', 'update:distro', 'update:super-user', 'config-update', 'show-stats', 'show-background', 'toggle-terminal', 'toggle-help'])
+const emit = defineEmits(['navigate', 'back', 'forward', 'home', 'refresh', 'update:user', 'update:distro', 'update:super-user', 'config-update', 'show-stats', 'show-background', 'show-reclaim', 'toggle-terminal', 'toggle-help'])
 
 const distros = ref([])
 const users = ref([])
@@ -187,10 +187,13 @@ function errStr(e) {
       <button class="icon-btn" title="System Stats" @click.stop="emit('show-stats')">
         <Eye :size="16" />
       </button>
-      <button class="icon-btn" :class="{ active: showTerminal }" title="Terminal (Ctrl/Cmd+T)" @click.stop="emit('toggle-terminal')">
+      <button class="icon-btn" title="Reclaim Disk Space" @click.stop="emit('show-reclaim')">
+        <HardDriveDownload :size="16" />
+      </button>
+      <button class="icon-btn" :class="{ active: showTerminal }" title="Terminal (Ctrl+T)" @click.stop="emit('toggle-terminal')">
         <Terminal :size="16" />
       </button>
-      <button class="icon-btn" :class="{ active: showHelp }" title="Command Help (Ctrl/Cmd+H)" @click.stop="emit('toggle-help')">
+      <button class="icon-btn" :class="{ active: showHelp }" title="Command Help (Ctrl+H)" @click.stop="emit('toggle-help')">
         <BookOpen :size="16" />
       </button>
       <button class="icon-btn" title="Background (Shift+I)" @click.stop="emit('show-background')">

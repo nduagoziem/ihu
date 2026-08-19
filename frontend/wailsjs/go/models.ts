@@ -21,6 +21,29 @@ export namespace config {
 
 }
 
+export namespace janitor {
+	
+	export class Result {
+	    vhdxPath: string;
+	    beforeBytes: number;
+	    afterBytes: number;
+	    savedBytes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.vhdxPath = source["vhdxPath"];
+	        this.beforeBytes = source["beforeBytes"];
+	        this.afterBytes = source["afterBytes"];
+	        this.savedBytes = source["savedBytes"];
+	    }
+	}
+
+}
+
 export namespace wsl {
 	
 	export class DefaultHome {
