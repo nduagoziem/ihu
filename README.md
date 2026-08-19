@@ -24,15 +24,27 @@ your files by clicking, watch system resources live, and drop into a real termin
 ## What it does today
 
 - 🗂️ **Visual file explorer** for the WSL2 filesystem — browse, sort, and pin favorite folders.
+  
 - 👀 **File viewer & editor** — preview images, PDFs, and Word docs; edit text files in place.
+
 - 🖥️ **Integrated real terminal** — a true pseudo-terminal (ConPTY) for `curl`, `dnf`, `docker`, etc.,
   with working `Ctrl-C` and live progress output. (Heavy TUIs like `vim`/`htop` are intentionally out of scope.)
+
 - 📊 **Live system stats** — CPU, memory, and disk usage of the running distro.
+  
 - 🧑‍🤝‍🧑 **Multi-distro & multi-user** — switch distros/users and run elevated (`sudo`) actions.
+
 - 🎨 **Personalization** — custom backgrounds and a tidy, glassy UI.
+
+- 🧹**Storage Cleaner/Janitor** — a visual utility to reclaim space, since the WSL2 `.vhdx`
+   disk image can grow very large over time.
 
 ## Getting started
 
+### Usage
+Download the latest version of the app from the releases [page.](https://github.com/nduagoziem/ihu/releases/latest)
+
+### Development
 **Prerequisites:** [Go](https://go.dev/), [Node.js](https://nodejs.org/), the
 [Wails CLI](https://wails.io/docs/gettingstarted/installation), and (to run) Windows with WSL2.
 
@@ -66,6 +78,8 @@ ihu/
 ├── wsl/                    # ★ CORE — everything that interacts with WSL2
 │   ├── wsl.go              #   filesystem ops: list dirs, read/write files, list users & distros
 │   ├── system_stats.go     #   CPU / memory / disk metrics
+│   ├── janitor/            #   reclaim disk space from the WSL2 vhdx image
+│   │   └── janitor.go      #     fstrim + diskpart compaction workflow
 │   └── terminal/           #   integrated PTY terminal
 │       ├── terminal.go     #     session manager + streaming to the UI
 │       └── conpty_windows.go #   low-level Windows ConPTY wrapper
@@ -90,16 +104,14 @@ into the UI through `app.go` and a Vue component.
 The mission is to make more of WSL2 *visual*. These are ordered by necessity, and **anyone is welcome
 to pick one up.**
 
-1. **Storage Cleaner** — a visual utility to reclaim space, since the WSL2 `.vhdx`
-   disk image can grow very large over time.
-2. **Port Forwarding & Network Monitor** — a dashboard of all ports listening inside
+1. **Port Forwarding & Network Monitor** — a dashboard of all ports listening inside
    WSL (e.g. `localhost:8080` for a React app, `localhost:5432` for Postgres) with one-click "open in
    Windows browser," since WSL↔Windows port mapping can get messy.
-3. **Multi-Distro Tabbed / Split View** — a split-screen view (e.g. Ubuntu on the
+2. **Multi-Distro Tabbed / Split View** — a split-screen view (e.g. Ubuntu on the
    left, Alpine on the right) with drag-and-drop file transfer between distros.
-4. **Live Docker Dashboard** — view running containers, images, and volumes inside a
+3. **Live Docker Dashboard** — view running containers, images, and volumes inside a
    specific distro.
-5. **One-click Services & Databases** — install and manage PostgreSQL, Redis, Nginx,
+4. **One-click Services & Databases** — install and manage PostgreSQL, Redis, Nginx,
    and similar via clicks instead of commands.
 
 ## Contributing
