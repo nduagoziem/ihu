@@ -5,7 +5,8 @@ before:
     - go mod tidy
 
 builds:
-  - env:
+  - id: e73d3e86-6740-4a1a-b6d3-d163e5fd27fd
+    env:
       - CGO_ENABLED=0
     goos:
       - windows
@@ -17,6 +18,48 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.ShortCommit}}
       - -X main.date={{.Date}}
+
+# Configures GoReleaser to produce MSI packages via WiX
+msi:
+  - id: myapp-msi
+    build_id: myapp
+    # GoReleaser will use your custom wix template
+    wix_template: |
+      <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+        <Package Name="{{ .ProjectName }}" 
+                 Manufacturer="My Company" 
+                 Version="{{ .Version }}" 
+                 UpgradeCode="05f0a150-e216-414e-880f-7a9827c99743">
+          
+          <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+          <MediaTemplate EmbedCab="yes" />
+
+          <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="INSTALLFOLDER" Name="{{ .ProjectName }}" />
+          </StandardDirectory>
+
+          <StandardDirectory Id="ProgramMenuFolder">
+            <Directory Id="ApplicationProgramsFolder" Name="{{ .ProjectName }}"/>
+          </StandardDirectory>
+
+          <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+            <Component Id="MainExecutable" Guid="306e5a2b-d524-4a5c-bf15-e4200abbc948">
+              <File Id="AppExe" Source="{{ .Binary }}.exe" KeyPath="yes" />
+              
+              <!-- Shortcut added to Start Menu -->
+              <Shortcut Id="ApplicationStartMenuShortcut"
+                        Name="{{ .ProjectName }}"
+                        Directory="ApplicationProgramsFolder"
+                        WorkingDirectory="INSTALLFOLDER"
+                        Advertise="yes" />
+            </Component>
+          </ComponentGroup>
+
+          <Feature Id="MainFeature" Title="Main Application" Level="1">
+            <ComponentGroupRef Id="ProductComponents" />
+          </Feature>
+        </Package>
+      </Wix>
 
 archives:
   - formats:
