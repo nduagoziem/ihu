@@ -6,6 +6,22 @@ export function DefaultHomePath() {
   return window['go']['main']['App']['DefaultHomePath']();
 }
 
+export function DeleteDir(arg1) {
+  return window['go']['main']['App']['DeleteDir'](arg1);
+}
+
+export function DeleteDirAs(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['DeleteDirAs'](arg1, arg2, arg3, arg4);
+}
+
+export function DeleteFile(arg1) {
+  return window['go']['main']['App']['DeleteFile'](arg1);
+}
+
+export function DeleteFileAs(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['DeleteFileAs'](arg1, arg2, arg3, arg4);
+}
+
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }

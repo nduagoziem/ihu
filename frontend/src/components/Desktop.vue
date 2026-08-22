@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { Folder, FileText, FileCode, FileImage, File, Pin, PinOff, Pencil, Eye, ChevronRight } from '@lucide/vue'
+import { Folder, FileText, FileCode, FileImage, File, Pin, PinOff, Pencil, Eye, ChevronRight, Trash2, FolderOpen, Loader2 } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps({
   cwd: String,
@@ -19,6 +20,10 @@ const error = ref('')
 const selected = ref(null)
 const showHidden = ref(false)
 const selectedAt = ref({ x: 0, y: 0, time: 0 })
+const contextMenu = ref({ open: false, x: 0, y: 0, entry: null })
+const pendingDelete = ref(null)
+const deleting = ref(false)
+const { notify } = useToast()
 let loadId = 0
 
 onMounted(load)
@@ -100,6 +105,7 @@ function doubleClick(entry) {
 }
 
 function togglePin(entry) {
+  closeContextMenu()
   emit('toggle-pin', entry.path)
 }
 
@@ -107,10 +113,72 @@ function clearSelection() {
   selected.value = null
 }
 
+function showContextMenu(entry, e) {
+  selected.value = entry
+  selectedAt.value = { x: e.clientX, y: e.clientY, time: Date.now() }
+  const width = 178
+  const height = entry.isDir ? 108 : 148
+  contextMenu.value = {
+    open: true,
+    x: Math.min(e.clientX, window.innerWidth - width - 8),
+    y: Math.min(e.clientY, window.innerHeight - height - 8),
+    entry,
+  }
+}
+
+function closeContextMenu() {
+  contextMenu.value.open = false
+}
+
+function openEditor(entry) {
+  closeContextMenu()
+  emit('open-editor', entry)
+}
+
+function openViewer(entry) {
+  closeContextMenu()
+  emit('open-viewer', entry)
+}
+
+function requestDelete(entry) {
+  closeContextMenu()
+  pendingDelete.value = entry
+}
+
+function cancelDelete() {
+  if (deleting.value) return
+  pendingDelete.value = null
+}
+
+async function confirmDelete() {
+  if (!pendingDelete.value || deleting.value) return
+  const entry = pendingDelete.value
+  deleting.value = true
+  try {
+    const elevated = props.superUser || props.currentUser === 'root'
+    if (entry.isDir) {
+      await App.DeleteDirAs(entry.path, props.currentDistro || '', props.currentUser || '', elevated)
+    } else {
+      await App.DeleteFileAs(entry.path, props.currentDistro || '', props.currentUser || '', elevated)
+    }
+    if (entry.isDir && isPinned(entry.path)) {
+      emit('toggle-pin', entry.path)
+    }
+    entries.value = entries.value.filter((item) => item.path !== entry.path)
+    pendingDelete.value = null
+    notify(`${entry.name} deleted`, 'success')
+    await load()
+  } catch (e) {
+    notify(`Could not delete ${entry.name}: ${String(e?.message || e || 'unknown error')}`)
+  } finally {
+    deleting.value = false
+  }
+}
+
 </script>
 
 <template>
-  <div class="desktop" @click.self="clearSelection">
+  <div class="desktop" @click="closeContextMenu" @click.self="clearSelection" @contextmenu.prevent="closeContextMenu">
     <div class="desktop__breadcrumbs glass">
       <button
         v-for="(c, i) in breadcrumbs"
@@ -145,6 +213,7 @@ function clearSelection() {
         :class="{ selected: selected === entry, pinned: isPinned(entry.path) }"
         @click="handleClick(entry, $event)"
         @dblclick="doubleClick(entry)"
+        @contextmenu.prevent.stop="showContextMenu(entry, $event)"
       >
         <div class="file-item__icon">
           <component :is="iconFor(entry)" :size="34" />
@@ -155,11 +224,63 @@ function clearSelection() {
           <button v-if="entry.isDir" class="mini" title="Pin/Unpin" @click.stop="togglePin(entry)">
             <component :is="isPinned(entry.path) ? PinOff : Pin" :size="13" />
           </button>
-          <button v-if="!entry.isDir" class="mini" title="Open in editor" @click.stop="emit('open-editor', entry)">
+          <button v-if="!entry.isDir" class="mini" title="Open in editor" @click.stop="openEditor(entry)">
             <Pencil :size="13" />
           </button>
-          <button v-if="!entry.isDir" class="mini" title="Open in viewer" @click.stop="emit('open-viewer', entry)">
+          <button v-if="!entry.isDir" class="mini" title="Open in viewer" @click.stop="openViewer(entry)">
             <Eye :size="13" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="contextMenu.open"
+      class="context-menu glass-strong"
+      :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+      @click.stop
+      @contextmenu.prevent.stop
+    >
+      <button v-if="contextMenu.entry?.isDir" class="context-menu__item" @click="openEntry(contextMenu.entry); closeContextMenu()">
+        <FolderOpen :size="15" />
+        <span>Open</span>
+      </button>
+      <button v-if="contextMenu.entry?.isDir" class="context-menu__item" @click="togglePin(contextMenu.entry)">
+        <component :is="isPinned(contextMenu.entry.path) ? PinOff : Pin" :size="15" />
+        <span>{{ isPinned(contextMenu.entry.path) ? 'Unpin' : 'Pin' }}</span>
+      </button>
+      <button v-if="!contextMenu.entry?.isDir" class="context-menu__item" @click="openEditor(contextMenu.entry)">
+        <Pencil :size="15" />
+        <span>Edit</span>
+      </button>
+      <button v-if="!contextMenu.entry?.isDir" class="context-menu__item" @click="openViewer(contextMenu.entry)">
+        <Eye :size="15" />
+        <span>Preview</span>
+      </button>
+      <div class="context-menu__sep"></div>
+      <button class="context-menu__item context-menu__item--danger" @click="requestDelete(contextMenu.entry)">
+        <Trash2 :size="15" />
+        <span>Delete</span>
+      </button>
+    </div>
+
+    <div v-if="pendingDelete" class="delete-confirm" @click.self="cancelDelete">
+      <div class="delete-confirm__panel glass-strong" @click.stop>
+        <div class="delete-confirm__icon">
+          <Trash2 :size="22" />
+        </div>
+        <div class="delete-confirm__copy">
+          <h2>Delete {{ pendingDelete.isDir ? 'folder' : 'file' }}?</h2>
+          <p>{{ pendingDelete.name }}</p>
+          <span v-if="pendingDelete.isDir">This will remove the folder and everything inside it.</span>
+          <span v-else>This will remove the file from WSL.</span>
+        </div>
+        <div class="delete-confirm__actions">
+          <button class="delete-confirm__btn" :disabled="deleting" @click="cancelDelete">Cancel</button>
+          <button class="delete-confirm__btn delete-confirm__btn--danger" :disabled="deleting" @click="confirmDelete">
+            <Loader2 v-if="deleting" :size="14" class="spin" />
+            <Trash2 v-else :size="14" />
+            {{ deleting ? 'Deleting' : 'Delete' }}
           </button>
         </div>
       </div>
@@ -255,6 +376,125 @@ function clearSelection() {
   transition: all var(--t-fast) var(--ease);
 }
 .mini:hover { background: var(--accent); color: #fff; }
+
+.context-menu {
+  position: fixed;
+  z-index: 82;
+  width: 178px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  animation: scaleIn var(--t-fast) var(--ease-out);
+}
+.context-menu__item {
+  width: 100%;
+  height: 32px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 9px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-align: left;
+}
+.context-menu__item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+.context-menu__item--danger { color: var(--rose); }
+.context-menu__item--danger:hover {
+  background: rgba(251, 113, 133, 0.14);
+  color: #fecdd3;
+}
+.context-menu__sep {
+  height: 1px;
+  margin: 5px 3px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.delete-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 84;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 6, 8, 0.5);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  animation: fadeIn var(--t-med) var(--ease);
+}
+.delete-confirm__panel {
+  width: min(380px, calc(100vw - 32px));
+  border-radius: var(--r-lg);
+  padding: 22px;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 14px;
+  box-shadow: var(--shadow-lg);
+  animation: scaleIn var(--t-med) var(--ease-out);
+}
+.delete-confirm__icon {
+  width: 42px; height: 42px;
+  border-radius: var(--r-md);
+  display: grid; place-items: center;
+  background: rgba(251, 113, 133, 0.14);
+  color: var(--rose);
+}
+.delete-confirm__copy {
+  min-width: 0;
+}
+.delete-confirm__copy h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+.delete-confirm__copy p {
+  margin: 8px 0 3px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.delete-confirm__copy span {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.delete-confirm__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.delete-confirm__btn {
+  height: 32px;
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+.delete-confirm__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+.delete-confirm__btn--danger {
+  border-color: rgba(251, 113, 133, 0.28);
+  background: rgba(251, 113, 133, 0.16);
+  color: #fecdd3;
+}
+.delete-confirm__btn--danger:hover:not(:disabled) {
+  background: rgba(251, 113, 133, 0.24);
+}
+.delete-confirm__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .desktop__empty {
   position: absolute;

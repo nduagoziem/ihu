@@ -207,6 +207,38 @@ func WriteFileAs(p, contents, distro, user string, elevated bool) error {
 	return err
 }
 
+func DeleteFile(p string) error {
+	return DeleteFileAs(p, "", "", false)
+}
+
+func DeleteFileAs(p, distro, user string, elevated bool) error {
+	if err := validateDeletePath(p); err != nil {
+		return err
+	}
+	_, err := RunCommandAs("rm -- "+shellQuote(p), distro, user, elevated)
+	return err
+}
+
+func DeleteDir(dir string) error {
+	return DeleteDirAs(dir, "", "", false)
+}
+
+func DeleteDirAs(dir, distro, user string, elevated bool) error {
+	if err := validateDeletePath(dir); err != nil {
+		return err
+	}
+	_, err := RunCommandAs("rm -r -- "+shellQuote(dir), distro, user, elevated)
+	return err
+}
+
+func validateDeletePath(p string) error {
+	p = strings.TrimSpace(p)
+	if p == "" || p == "/" || p == "." || p == ".." {
+		return fmt.Errorf("refusing to delete unsafe path %q", p)
+	}
+	return nil
+}
+
 // ReadFileBase64 returns a file's raw bytes encoded as base64 so binary
 // content (images, PDFs, docx) can travel safely through the Wails bridge.
 func ReadFileBase64(p string) (string, error) {
@@ -218,12 +250,17 @@ func ReadFileBase64As(p, distro, user string, elevated bool) (string, error) {
 }
 
 func RunCommandAs(cmd, distro, user string, elevated bool) (string, error) {
+	resolvedUser := commandUser(user, elevated)
+	if (distro == "" || distro == "default") && resolvedUser == "" {
+		return runSession(cmd)
+	}
+
 	args := []string{}
 	if distro != "" && distro != "default" {
 		args = append(args, "-d", distro)
 	}
-	if resolved := commandUser(user, elevated); resolved != "" {
-		args = append(args, "-u", resolved)
+	if resolvedUser != "" {
+		args = append(args, "-u", resolvedUser)
 	}
 	args = append(args, "--", "sh", "-lc", cmd)
 
@@ -234,14 +271,7 @@ func RunCommandAs(cmd, distro, user string, elevated bool) (string, error) {
 
 	out, err := wslCmd.CombinedOutput()
 	clean := strings.TrimSpace(cleanCommandBytes(out))
-	if err != nil && clean != "" {
-		return clean, err
-	}
-
-	if elevated || user == "root" {
-		return runSession("sudo -n sh -lc " + shellQuote(cmd))
-	}
-	return runSession(cmd)
+	return clean, err
 }
 
 func runSession(cmd string) (string, error) {

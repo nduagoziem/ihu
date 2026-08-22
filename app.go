@@ -132,6 +132,24 @@ func (a *App) WriteFileAs(path, contents, distro, user string, elevated bool) er
 	return wsl.WriteFileAs(path, contents, distro, user, elevated)
 }
 
+// DeleteFile removes a single file from WSL.
+func (a *App) DeleteFile(path string) error {
+	return wsl.DeleteFile(path)
+}
+
+func (a *App) DeleteFileAs(path, distro, user string, elevated bool) error {
+	return wsl.DeleteFileAs(path, distro, user, elevated)
+}
+
+// DeleteDir removes a directory tree from WSL.
+func (a *App) DeleteDir(path string) error {
+	return wsl.DeleteDir(path)
+}
+
+func (a *App) DeleteDirAs(path, distro, user string, elevated bool) error {
+	return wsl.DeleteDirAs(path, distro, user, elevated)
+}
+
 // RunWSLCommand sends a command to the long-lived WSL shell and returns stdout/stderr.
 func (a *App) RunWSLCommand(command string) (string, error) {
 	session := a.boot

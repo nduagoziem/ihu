@@ -6,6 +6,14 @@ import {janitor} from '../models';
 
 export function DefaultHomePath():Promise<wsl.DefaultHome>;
 
+export function DeleteDir(arg1:string):Promise<void>;
+
+export function DeleteDirAs(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+
+export function DeleteFile(arg1:string):Promise<void>;
+
+export function DeleteFileAs(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+
 export function GetConfig():Promise<config.WSLConfig>;
 
 export function GetStats():Promise<wsl.SystemStats>;
