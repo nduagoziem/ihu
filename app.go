@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"ihu/appupdate"
 	"ihu/boot"
 	"ihu/config"
 	"ihu/wsl"
@@ -12,6 +13,8 @@ import (
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+var currentVersion = "v1.1.0"
 
 // App struct
 type App struct {
@@ -52,6 +55,30 @@ func (a *App) shutdown(ctx context.Context) {
 	if boot.Session != nil {
 		boot.Session.Close()
 	}
+}
+
+// --- App update -----------------------------------------------------------
+
+func (a *App) AppVersion() string {
+	return currentVersion
+}
+
+func (a *App) CheckForUpdate() (*appupdate.Info, error) {
+	return appupdate.Check(currentVersion)
+}
+
+func (a *App) InstallUpdate() (*appupdate.Result, error) {
+	return appupdate.Install(currentVersion)
+}
+
+func (a *App) RestartApp() error {
+	if err := appupdate.Restart(); err != nil {
+		return err
+	}
+	if a.ctx != nil {
+		wruntime.Quit(a.ctx)
+	}
+	return nil
 }
 
 // --- Config ---------------------------------------------------------------

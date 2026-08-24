@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { Download, Loader2, X, RefreshCw } from '@lucide/vue'
 import * as App from '../wailsjs/go/main/App'
 import { useToast } from './composables/useToast'
 import ToastStack from './components/ToastStack.vue'
@@ -31,6 +32,7 @@ const ui = reactive({
   showViewer: false,
   showBackgroundPicker: false,
   showReclaim: false,
+  showUpdate: false,
 })
 
 // reclaimBusy is true while a space-reclaim operation is mid-flight. It hard
@@ -47,6 +49,10 @@ const superUser = ref(false)
 const systemStats = ref(null)
 const bgRefresh = ref(0)
 const desktopRefresh = ref(0)
+const updateInfo = ref(null)
+const checkingUpdate = ref(false)
+const installingUpdate = ref(false)
+const updateRestartKey = 'ihu:updateRestartPending'
 const modalActive = computed(() => (
   ui.showStats
   || ui.showTerminal
@@ -55,6 +61,7 @@ const modalActive = computed(() => (
   || ui.showViewer
   || ui.showBackgroundPicker
   || ui.showReclaim
+  || ui.showUpdate
 ))
 
 const desktopStyle = computed(() => {
@@ -81,6 +88,7 @@ const desktopStyle = computed(() => {
 })
 
 onMounted(async () => {
+  showPendingUpdateToast()
   try {
     const cfg = await App.GetConfig()
     if (cfg) Object.assign(config, cfg)
@@ -246,6 +254,68 @@ async function refreshSystemStats() {
   }
 }
 
+async function checkForUpdate() {
+  if (checkingUpdate.value || installingUpdate.value) return
+  checkingUpdate.value = true
+  try {
+    const info = await App.CheckForUpdate()
+    updateInfo.value = info
+    if (info?.available) {
+      ui.showUpdate = true
+    } else {
+      notify(`No updates available. You are on ${info?.currentVersion || 'the latest version'}.`, 'success')
+    }
+  } catch (e) {
+    notify('Could not check for updates: ' + errMsg(e))
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+function closeUpdateModal() {
+  if (installingUpdate.value) return
+  ui.showUpdate = false
+}
+
+async function installUpdate() {
+  if (installingUpdate.value) return
+  installingUpdate.value = true
+  try {
+    const result = await App.InstallUpdate()
+    if (!result?.restartRequired) {
+      ui.showUpdate = false
+      notify(result?.message || 'No updates available.', 'success')
+      return
+    }
+
+    localStorage.setItem(updateRestartKey, JSON.stringify({
+      version: result.currentVersion || updateInfo.value?.latestVersion || '',
+      installedAt: Date.now(),
+    }))
+    notify('Update installed. Restarting...', 'success')
+    await App.RestartApp()
+  } catch (e) {
+    localStorage.removeItem(updateRestartKey)
+    notify('Could not install update: ' + errMsg(e))
+  } finally {
+    installingUpdate.value = false
+  }
+}
+
+function showPendingUpdateToast() {
+  try {
+    const raw = localStorage.getItem(updateRestartKey)
+    if (!raw) return
+    localStorage.removeItem(updateRestartKey)
+    const pending = JSON.parse(raw)
+    const suffix = pending?.version ? ` to ${pending.version}` : ''
+    notify(`Update installed successfully${suffix}.`, 'success')
+  } catch {
+    localStorage.removeItem(updateRestartKey)
+    notify('Update installed successfully.', 'success')
+  }
+}
+
 function errMsg(e) {
   return String(e?.message || e || 'unknown error')
 }
@@ -273,6 +343,7 @@ function resolveBackground(background) {
       :show-terminal="ui.showTerminal"
       :show-help="ui.showHelp"
       :super-user="superUser"
+      :checking-update="checkingUpdate"
       @navigate="navigateTo"
       @back="navigateBack"
       @forward="navigateForward"
@@ -285,6 +356,7 @@ function resolveBackground(background) {
       @show-stats="openSystemStats"
       @show-background="ui.showBackgroundPicker = true"
       @show-reclaim="openReclaim"
+      @check-update="checkForUpdate"
       @toggle-terminal="ui.showTerminal = !ui.showTerminal"
       @toggle-help="ui.showHelp = !ui.showHelp"
     />
@@ -347,6 +419,34 @@ function resolveBackground(background) {
       />
     </Transition>
 
+    <Transition name="scale">
+      <div v-if="ui.showUpdate" class="update-modal" @click.self="closeUpdateModal">
+        <div class="update-modal__panel glass-strong" @click.stop>
+          <div class="update-modal__head">
+            <div class="update-modal__icon">
+              <Download :size="19" />
+            </div>
+            <button class="update-modal__close" :disabled="installingUpdate" @click="closeUpdateModal">
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="update-modal__body">
+            <h2>Update available</h2>
+            <p>{{ updateInfo?.currentVersion }} -> {{ updateInfo?.latestVersion }}</p>
+            <span v-if="updateInfo?.assetName">{{ updateInfo.assetName }}</span>
+          </div>
+          <div class="update-modal__actions">
+            <button class="update-modal__btn" :disabled="installingUpdate" @click="closeUpdateModal">Later</button>
+            <button class="update-modal__btn update-modal__btn--primary" :disabled="installingUpdate" @click="installUpdate">
+              <Loader2 v-if="installingUpdate" :size="14" class="spin" />
+              <RefreshCw v-else :size="14" />
+              {{ installingUpdate ? 'Installing' : 'Install' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Hard app-wide lock while a reclaim operation is in flight. Sits above
          everything except the reclaim modal and swallows all interaction. -->
     <div v-if="reclaimBusy" class="busy-lock" @click.stop @contextmenu.prevent></div>
@@ -391,6 +491,107 @@ function resolveBackground(background) {
   z-index: 105;
   cursor: wait;
   background: transparent;
+}
+
+.update-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 86;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 6, 8, 0.38);
+}
+.update-modal__panel {
+  width: min(340px, calc(100vw - 32px));
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-lg);
+}
+.update-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.update-modal__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  color: var(--accent-hover);
+  background: var(--info-100);
+}
+.update-modal__close {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  border: none;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-muted);
+}
+.update-modal__close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+.update-modal__body {
+  margin-top: 12px;
+}
+.update-modal__body h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+.update-modal__body p {
+  margin: 7px 0 2px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.update-modal__body span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.update-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.update-modal__btn {
+  height: 32px;
+  padding: 0 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.update-modal__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+.update-modal__btn--primary {
+  border-color: var(--info-300);
+  background: var(--info-100);
+  color: var(--accent-hover);
+}
+.update-modal__btn:disabled,
+.update-modal__close:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .terminal-slide-enter-active,

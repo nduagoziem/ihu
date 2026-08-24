@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { ChevronLeft, ChevronRight, ChevronDown, Check, Home, Eye, RefreshCw, Image as ImageIcon, Terminal, BookOpen, Shield, HardDriveDownload } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, ChevronDown, Check, Home, Eye, RefreshCw, Image as ImageIcon, Terminal, BookOpen, Shield, HardDriveDownload, Download, Loader2 } from '@lucide/vue'
 import * as App from '../../wailsjs/go/main/App'
 import { useToast } from '../composables/useToast'
 
@@ -14,8 +14,9 @@ const props = defineProps({
   showTerminal: Boolean,
   showHelp: Boolean,
   superUser: Boolean,
+  checkingUpdate: Boolean,
 })
-const emit = defineEmits(['navigate', 'back', 'forward', 'home', 'refresh', 'update:user', 'update:distro', 'update:super-user', 'config-update', 'show-stats', 'show-background', 'show-reclaim', 'toggle-terminal', 'toggle-help'])
+const emit = defineEmits(['navigate', 'back', 'forward', 'home', 'refresh', 'update:user', 'update:distro', 'update:super-user', 'config-update', 'show-stats', 'show-background', 'show-reclaim', 'check-update', 'toggle-terminal', 'toggle-help'])
 
 const distros = ref([])
 const users = ref([])
@@ -190,6 +191,10 @@ function errStr(e) {
       <button class="icon-btn" title="Reclaim Disk Space" @click.stop="emit('show-reclaim')">
         <HardDriveDownload :size="16" />
       </button>
+      <button class="icon-btn" :disabled="checkingUpdate" title="Check for Updates" @click.stop="emit('check-update')">
+        <Loader2 v-if="checkingUpdate" :size="16" class="spin" />
+        <Download v-else :size="16" />
+      </button>
       <button class="icon-btn" :class="{ active: showTerminal }" title="Terminal (Ctrl+T)" @click.stop="emit('toggle-terminal')">
         <Terminal :size="16" />
       </button>
@@ -252,6 +257,8 @@ function errStr(e) {
 .icon-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
 .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .icon-btn.active { background: var(--info-100); color: var(--accent-hover); box-shadow: inset 0 0 0 1px var(--info-300); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .chip {
   display: flex; align-items: center; gap: 6px;

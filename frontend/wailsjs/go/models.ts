@@ -1,3 +1,56 @@
+export namespace appupdate {
+	
+	export class Info {
+	    currentVersion: string;
+	    latestVersion: string;
+	    available: boolean;
+	    releaseName: string;
+	    releaseNotes: string;
+	    releaseUrl: string;
+	    publishedAt: string;
+	    assetName: string;
+	    assetUrl: string;
+	    assetSize: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.available = source["available"];
+	        this.releaseName = source["releaseName"];
+	        this.releaseNotes = source["releaseNotes"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.publishedAt = source["publishedAt"];
+	        this.assetName = source["assetName"];
+	        this.assetUrl = source["assetUrl"];
+	        this.assetSize = source["assetSize"];
+	    }
+	}
+	export class Result {
+	    currentVersion: string;
+	    previousVersion: string;
+	    restartRequired: boolean;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.previousVersion = source["previousVersion"];
+	        this.restartRequired = source["restartRequired"];
+	        this.message = source["message"];
+	    }
+	}
+
+}
+
 export namespace config {
 	
 	export class WSLConfig {

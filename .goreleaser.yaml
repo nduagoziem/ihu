@@ -27,7 +27,7 @@ msi:
     wix_template: |
       <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
         <Package Name="{{ .ProjectName }}" 
-                 Manufacturer="My Company" 
+                 Manufacturer="nduagoziem" 
                  Version="{{ .Version }}" 
                  UpgradeCode="05f0a150-e216-414e-880f-7a9827c99743">
           
