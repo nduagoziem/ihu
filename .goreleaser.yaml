@@ -20,10 +20,9 @@ builds:
       - -X main.date={{.Date}}
 
 # Configures GoReleaser to produce MSI packages via WiX
-msi:
+wix:
   - id: myapp-msi
     build_id: myapp
-    # GoReleaser will use your custom wix template
     wix_template: |
       <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
         <Package Name="{{ .ProjectName }}" 
