@@ -1,0 +1,36 @@
+<!-- Wix template file for generating MSI files -->
+
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="$(var.ProjectName)"
+           Manufacturer="nduagoziem"
+           Version="$(var.Version)"
+           UpgradeCode="05f0a150-e216-414e-880f-7a9827c99743">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="$(var.ProjectName)" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="$(var.ProjectName)"/>
+    </StandardDirectory>
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="306e5a2b-d524-4a5c-bf15-e4200abbc948">
+        <File Id="AppExe" Source="$(var.SourceDir)\$(var.Binary).exe" KeyPath="yes" />
+
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="$(var.ProjectName)"
+                  Directory="ApplicationProgramsFolder"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Advertise="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="MainFeature" Title="Main Application" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+</Wix>

@@ -44,3 +44,36 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build MSI packages
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $projectName = "myapp"      # <-- set to your actual project name
+          $binary = "myapp"           # <-- set to your actual binary name
+
+          foreach ($arch in @("amd64", "arm64")) {
+            $sourceDir = Get-ChildItem -Path "dist" -Directory |
+              Where-Object { $_.Name -like "*windows_$arch*" } |
+              Select-Object -First 1 -ExpandProperty FullName
+
+            if (-not $sourceDir) {
+              Write-Warning "No dist folder found for windows/$arch, skipping"
+              continue
+            }
+
+            $msiArch = if ($arch -eq "amd64") { "x64" } else { "arm64" }
+            $outFile = "dist/${projectName}_${version}_windows_${msiArch}.msi"
+
+            wix build windows/app.wxs `
+              -arch $msiArch `
+              -d ProjectName=$projectName `
+              -d Version=$version `
+              -d Binary=$binary `
+              -d SourceDir=$sourceDir `
+              -out $outFile
+
+            gh release upload "${{ github.ref_name }}" $outFile --clobber
+          }
