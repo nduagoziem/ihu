@@ -5,27 +5,7 @@ before:
     - go mod tidy
 
 builds:
-  - id: e73d3e86-6740-4a1a-b6d3-d163e5fd27fd
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.ShortCommit}}
-      - -X main.date={{.Date}}
-
-archives:
-  - formats:
-      - zip
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files:
-      - README*
-      - LICENSE*
+  - skip: true
 
 changelog:
   sort: asc
