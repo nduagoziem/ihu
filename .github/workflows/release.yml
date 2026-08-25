@@ -53,8 +53,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
-          $projectName = "myapp"      # <-- set to your actual project name
-          $binary = "myapp"           # <-- set to your actual binary name
+          $projectName = "ihu"
+          $binary = "ihu"
 
           foreach ($arch in @("amd64", "arm64")) {
             $sourceDir = Get-ChildItem -Path "dist" -Directory |
