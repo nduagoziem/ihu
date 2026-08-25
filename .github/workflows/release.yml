@@ -34,7 +34,9 @@ jobs:
           go-version: "1.26"
 
       - name: Install WiX Toolset
-        run: dotnet tool install --global wix
+        run: |
+          dotnet tool install --global wix
+          wix.exe eula accept wix7
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
