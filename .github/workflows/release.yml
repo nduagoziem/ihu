@@ -70,6 +70,7 @@ jobs:
             $sourceDir = Join-Path $PWD "dist/${projectName}_${version}_windows_${arch}"
             $zipFile = Join-Path $PWD "dist/${projectName}_${version}_windows_${arch}.zip"
             $outFile = "dist/${projectName}_${version}_windows_${msiArch}.msi"
+            $iconFile = Join-Path $PWD "build/windows/icon.ico"
 
             New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
 
@@ -97,6 +98,7 @@ jobs:
               -d Version=$version `
               -d Binary=$binary `
               -d SourceDir=$sourceDir `
+              -d IconFile=$iconFile `
               -out $outFile
 
             gh release upload "${{ github.ref_name }}" $zipFile --clobber
