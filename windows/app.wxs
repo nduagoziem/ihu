@@ -8,6 +8,8 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon.ico" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="$(var.ProjectName)" />
@@ -25,6 +27,8 @@
                   Name="$(var.ProjectName)"
                   Directory="ApplicationProgramsFolder"
                   WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico"
+                  IconIndex="0"
                   Advertise="yes" />
       </Component>
     </ComponentGroup>

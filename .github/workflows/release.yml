@@ -22,16 +22,20 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
       - name: Build Frontend
         run: |
           cd frontend
           npm install
           npm run build
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
+      - name: Install Wails CLI
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
 
       - name: Install WiX Toolset
         run: |
@@ -47,27 +51,46 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build MSI packages
+      - name: Build Wails binaries and MSI packages
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $ErrorActionPreference = "Stop"
+          $env:Path = "$env:USERPROFILE\go\bin;$env:Path"
+          $env:GOCACHE = Join-Path $PWD ".gocache"
+
+          $tag = "${{ github.ref_name }}"
           $version = "${{ github.ref_name }}".TrimStart("v")
           $projectName = "ihu"
           $binary = "ihu"
 
           foreach ($arch in @("amd64", "arm64")) {
-            $sourceDir = Get-ChildItem -Path "dist" -Directory |
-              Where-Object { $_.Name -like "*windows_$arch*" } |
-              Select-Object -First 1 -ExpandProperty FullName
-
-            if (-not $sourceDir) {
-              Write-Warning "No dist folder found for windows/$arch, skipping"
-              continue
-            }
-
             $msiArch = if ($arch -eq "amd64") { "x64" } else { "arm64" }
+            $sourceDir = Join-Path $PWD "dist/${projectName}_${version}_windows_${arch}"
+            $zipFile = Join-Path $PWD "dist/${projectName}_${version}_windows_${arch}.zip"
             $outFile = "dist/${projectName}_${version}_windows_${msiArch}.msi"
+            $iconFile = Join-Path $PWD "build/windows/icon.ico"
+
+            New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
+
+            wails build `
+              -clean `
+              -s `
+              -nopackage `
+              -platform "windows/$arch" `
+              -o "$binary" `
+              -ldflags "-s -w -X main.currentVersion=$tag"
+
+            $builtExe = "build/bin/$binary"
+            if (-not (Test-Path $builtExe)) {
+              $builtExe = "build/bin/$binary.exe"
+            }
+            Copy-Item -Path $builtExe -Destination "$sourceDir/$binary.exe" -Force
+            Copy-Item -Path "README.md" -Destination "$sourceDir/README.md" -Force
+            Copy-Item -Path "COPYING" -Destination "$sourceDir/COPYING" -Force
+
+            Compress-Archive -Path "$sourceDir/*" -DestinationPath $zipFile -Force
 
             wix build windows/app.wxs `
               -arch $msiArch `
@@ -75,7 +98,9 @@ jobs:
               -d Version=$version `
               -d Binary=$binary `
               -d SourceDir=$sourceDir `
+              -d IconFile=$iconFile `
               -out $outFile
 
+            gh release upload "${{ github.ref_name }}" $zipFile --clobber
             gh release upload "${{ github.ref_name }}" $outFile --clobber
           }
